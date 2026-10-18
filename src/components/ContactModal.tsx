@@ -141,7 +141,7 @@ export default function ContactModal({ isOpen, onClose, preselectedPlan }: Conta
                 <span>Ticket: #{ticketId}</span>
               </div>
               <h3 className="text-2xl font-bold text-slate-900 tracking-tight">
-                ¡Demostración Solicitada con Éxito!
+                ¡Solicitud enviada con éxito!
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed max-w-sm mx-auto">
                 Tu solicitud ha sido registrada en el sistema de admisiones del <strong className="text-slate-800">Sistema Ryuk</strong>.
@@ -211,7 +211,7 @@ export default function ContactModal({ isOpen, onClose, preselectedPlan }: Conta
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-900 leading-tight">
-                  Agendar Demostración para tu Colegio
+                  Solicita información para tu colegio
                 </h3>
                 <p className="text-[11px] text-slate-500">
                   Acceso a la plataforma completa y asesoría personalizada.
@@ -320,7 +320,7 @@ export default function ContactModal({ isOpen, onClose, preselectedPlan }: Conta
                   onChange={(e) => setFormData({ ...formData, educationLevel: e.target.value })}
                   className="w-full py-2 px-3 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 text-slate-900 bg-white"
                 >
-                  <option value="Inicial y Primaria">Inicial y Primaria</option>
+                  <option value="Solo Primaria">Solo Primaria</option>
                   <option value="Secundaria">Secundaria</option>
                   <option value="Primaria y Secundaria">Primaria y Secundaria</option>
                   <option value="Escuela y Colegio Integrado">Escuela y Colegio Integrado</option>

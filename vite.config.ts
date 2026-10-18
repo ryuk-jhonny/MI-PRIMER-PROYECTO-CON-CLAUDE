@@ -9,13 +9,14 @@ export default defineConfig({
     port: 3000,
   },
   build: {
+    chunkSizeWarningLimit: 700,
     rolldownOptions: {
       output: {
         codeSplitting: {
           groups: [
             { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
             { name: 'motion', test: /node_modules[\\/](motion|framer-motion|motion-dom|motion-utils)[\\/]/ },
-            { name: 'supabase', test: /node_modules[\\/]@supabase[\\/]/ },
+            { name: 'firebase', test: /node_modules[\\/](firebase|@firebase)[\\/]/ },
           ],
         },
       },

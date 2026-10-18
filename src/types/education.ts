@@ -52,6 +52,8 @@ export interface StudentCourseGrade {
   average: CnebLiteralGrade | '';
   status: 'Logro Destacado' | 'Logro Esperado' | 'En Proceso' | 'En Inicio' | 'Sin calificar';
   recentFeedback: string;
+  /** Calificación por competencia: id de competencia (c1…c31) → literal de cada periodo. */
+  comp?: Record<string, (CnebLiteralGrade | '')[]>;
 }
 
 export interface AttendanceDay {
@@ -82,7 +84,12 @@ export interface Student {
   dni?: string;
   parentPhone?: string;
   parentName?: string;
-  educationalLevel?: 'Inicial' | 'Primaria' | 'Secundaria';
+  educationalLevel?: 'Primaria' | 'Secundaria';
+  justifiedDays?: number;
+  /** Código para que el estudiante cree su cuenta. */
+  studentCode?: string;
+  /** Código para que la familia cree su cuenta. */
+  familyCode?: string;
   gender?: 'M' | 'F';
   address?: string;
   birthDate?: string;

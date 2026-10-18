@@ -17,7 +17,7 @@ export default function TopNotificationBar({ onOpenAccessModal }: TopNotificatio
           </span>
           <span className="hidden md:inline text-slate-500">|</span>
           <span className="hidden md:inline text-slate-400">
-            Plataforma integral de gestión de portafolios docentes, asistencia QR y calificaciones en tiempo real
+            Dirección, docentes, estudiantes y familias en una sola plataforma: CNEB por área, notas por competencia y asistencia QR
           </span>
         </div>
 

@@ -9,7 +9,7 @@ import { aulaOf, downloadCsv, waLink } from '../lib/school';
 type Filter = 'todos' | 'presentes' | 'tardanzas' | 'pendientes';
 
 export default function AttendanceTab({ ctx }: { ctx: PanelCtx }) {
-  const { students, todayRecords, config, store, today } = ctx;
+  const { students, todayRecords, config, me, today } = ctx;
   const [last, setLast] = useState<ScanResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>('todos');
@@ -17,7 +17,7 @@ export default function AttendanceTab({ ctx }: { ctx: PanelCtx }) {
   const [aula, setAula] = useState('');
   const [confirmClose, setConfirmClose] = useState(false);
   const lastTimer = useRef<number>(0);
-  const canEdit = store.role === 'director' || store.role === 'auxiliar';
+  const canEdit = me.role === 'director' || me.role === 'auxiliar';
 
   const recordOf = useMemo(() => new Map(todayRecords.map((r) => [r.studentId, r])), [todayRecords]);
   const aulas = useMemo(() => [...new Set(students.map(aulaOf))].sort(), [students]);
@@ -175,7 +175,7 @@ export default function AttendanceTab({ ctx }: { ctx: PanelCtx }) {
                         )}
                       </>
                     ) : (
-                      <button type="button" onClick={() => ctx.registerStudent(s)} className="h-9 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1.5 cursor-pointer">
+                      <button type="button" onClick={() => ctx.registerStudent(s)} aria-label={`Registrar ingreso de ${s.fullName}`} className="h-9 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 inline-flex items-center gap-1.5 cursor-pointer">
                         <UserCheck className="w-4 h-4" /> <span className="hidden sm:inline">Registrar</span>
                       </button>
                     )}

@@ -2,10 +2,10 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Copy, Megaphone, Send, Trash2 } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Announcement } from '../lib/store';
-import { friendlyError } from '../lib/supabase';
+import { friendlyError } from '../lib/firebase';
 import { btn, Card, Empty, PageHeader } from './ui';
 
-const AUD_LABEL = { all: 'Toda la comunidad', inicial: 'Inicial', primaria: 'Primaria', secundaria: 'Secundaria' };
+const AUD_LABEL = { all: 'Toda la comunidad', primaria: 'Primaria', secundaria: 'Secundaria' };
 
 export default function AnnouncementsTab({ ctx }: { ctx: PanelCtx }) {
   const { store, config } = ctx;
@@ -13,7 +13,8 @@ export default function AnnouncementsTab({ ctx }: { ctx: PanelCtx }) {
   const [body, setBody] = useState('');
   const [audience, setAudience] = useState<Announcement['audience']>('all');
   const [busy, setBusy] = useState(false);
-  const isDirector = store.role === 'director';
+  const isDirector = ctx.isDirector;
+  const canPublish = isDirector || ctx.me.role === 'docente';
 
   const load = async () => {
     try { setList(await store.listAnnouncements()); } catch (err) { ctx.toast(friendlyError(err), 'error'); setList([]); }
@@ -27,7 +28,7 @@ export default function AnnouncementsTab({ ctx }: { ctx: PanelCtx }) {
     try {
       await store.addAnnouncement(audience, body.trim());
       setBody('');
-      ctx.toast('Comunicado publicado. Las familias ya lo ven en su portal.');
+      ctx.toast('Comunicado publicado. Estudiantes y familias ya lo ven.');
       await load();
     } catch (err) { ctx.toast(friendlyError(err), 'error'); }
     setBusy(false);
@@ -39,9 +40,9 @@ export default function AnnouncementsTab({ ctx }: { ctx: PanelCtx }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Comunicados" subtitle="Se publican en el portal que abren las familias al escanear el carnet." />
+      <PageHeader title="Comunicados" subtitle="Los ven estudiantes y familias en su cuenta y en el portal del carnet." />
 
-      {isDirector && (
+      {canPublish && (
         <Card className="p-5">
           <form onSubmit={publish} className="space-y-3">
             <label htmlFor="ann" className="block text-sm font-semibold text-slate-200">Nuevo comunicado</label>
@@ -82,7 +83,7 @@ export default function AnnouncementsTab({ ctx }: { ctx: PanelCtx }) {
                   <button type="button" aria-label="Copiar para WhatsApp" title="Copiar para pegar en el grupo de WhatsApp" onClick={() => { navigator.clipboard?.writeText(`${config.shortName || config.institutionName}\n\n${a.body}`); ctx.toast('Texto copiado.'); }} className={btn.ghost}>
                     <Copy className="w-4 h-4" />
                   </button>
-                  {isDirector && (
+                  {(isDirector || a.authorUid === ctx.me.uid) && (
                     <button type="button" aria-label="Eliminar comunicado" onClick={() => remove(a.id)} className={btn.ghost}><Trash2 className="w-4 h-4 text-rose-400" /></button>
                   )}
                 </div>

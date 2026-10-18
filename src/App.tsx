@@ -5,7 +5,7 @@ import FullLoader from './app/FullLoader';
 import Landing from './pages/Landing';
 
 const CloudApp = lazy(() => import('./app/CloudApp'));
-const DemoPanel = lazy(() => import('./app/DemoPanel'));
+const SetupNeeded = lazy(() => import('./app/SetupNeeded'));
 const FamilyPortal = lazy(() => import('./portal/FamilyPortal'));
 const Privacy = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Privacy })));
 const Terms = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Terms })));
@@ -16,8 +16,7 @@ export default function App() {
 
   let page;
   if (portal) page = <FamilyPortal token={portal[1].toLowerCase()} />;
-  else if (path.startsWith('/demo')) page = <DemoPanel />;
-  else if (path.startsWith('/app')) page = cloudEnabled ? <CloudApp /> : <DemoPanel />;
+  else if (path.startsWith('/app')) page = cloudEnabled ? <CloudApp /> : <SetupNeeded />;
   else if (path.startsWith('/privacidad')) page = <Privacy />;
   else if (path.startsWith('/terminos')) page = <Terms />;
   else page = <Landing />;

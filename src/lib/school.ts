@@ -1,25 +1,22 @@
 import { Student, StudentCourseGrade, CnebLiteralGrade } from '../types/education';
 import { EducationalLevel, InstitutionConfig } from '../types/institution';
+import { areasOf, competenciasOf } from './cneb';
 
 export type Literal = CnebLiteralGrade | '';
 export const LITERALS: CnebLiteralGrade[] = ['AD', 'A', 'B', 'C'];
 
 /** Áreas curriculares del CNEB por nivel (MINEDU). */
 export const CNEB_AREAS: Record<EducationalLevel, string[]> = {
-  inicial: ['Personal Social', 'Psicomotriz', 'Comunicación', 'Matemática', 'Ciencia y Tecnología'],
-  primaria: ['Personal Social', 'Educación Física', 'Comunicación', 'Arte y Cultura', 'Inglés', 'Matemática', 'Ciencia y Tecnología', 'Educación Religiosa'],
-  secundaria: [
-    'Desarrollo Personal, Ciudadanía y Cívica', 'Ciencias Sociales', 'Educación Física', 'Arte y Cultura', 'Comunicación',
-    'Inglés', 'Matemática', 'Ciencia y Tecnología', 'Educación para el Trabajo', 'Educación Religiosa',
-  ],
+  primaria: areasOf('primaria'),
+  secundaria: areasOf('secundaria'),
 };
 
-export function levelOf(s: Student): EducationalLevel {
+export function levelOf(s: Pick<Student, 'educationalLevel' | 'gradeLevel'>): EducationalLevel {
   const l = (s.educationalLevel || '').toLowerCase();
   const g = (s.gradeLevel || '').toLowerCase();
-  if (l.includes('ini') || g.includes('ini') || g.includes('año')) return 'inicial';
   if (l.includes('pri') || g.includes('pri')) return 'primaria';
-  return 'secundaria';
+  if (l.includes('sec') || g.includes('sec')) return 'secundaria';
+  return 'primaria';
 }
 
 export function aulaOf(s: Student): string {
@@ -32,6 +29,24 @@ export function periodCount(cfg: InstitutionConfig): number {
 
 export function periodLabel(cfg: InstitutionConfig, i: number): string {
   return `${cfg.periodType === 'trimestral' ? 'Trim.' : 'Bim.'} ${['I', 'II', 'III', 'IV'][i]}`;
+}
+
+/** Posición (0, 1, 2…) del periodo activo, leída de "Bimestre II" o "Trimestre III". */
+export function activePeriodIndex(cfg: InstitutionConfig): number {
+  const m = (cfg.activePeriod || '').match(/\b(IV|III|II|I)\b/);
+  return m ? ['I', 'II', 'III', 'IV'].indexOf(m[1]) : 0;
+}
+
+export function periodNames(cfg: InstitutionConfig): string[] {
+  const word = cfg.periodType === 'trimestral' ? 'Trimestre' : 'Bimestre';
+  return ['I', 'II', 'III', 'IV'].slice(0, periodCount(cfg)).map((r) => `${word} ${r}`);
+}
+
+/** Índice de masa corporal con un decimal (peso en kg, talla en cm). */
+export function imcOf(weightKg: number, heightCm: number): number {
+  if (!(weightKg > 0) || !(heightCm > 0)) return 0;
+  const m = heightCm / 100;
+  return Math.round((weightKg / (m * m)) * 10) / 10;
 }
 
 const SCORE: Record<CnebLiteralGrade, number> = { AD: 4, A: 3, B: 2, C: 1 };
@@ -89,6 +104,39 @@ export function setGrade(s: Student, area: string, unit: number, value: Literal,
   if (teacherName && !base.teacherName) base.teacherName = teacherName;
   if (idx >= 0) grades[idx] = base; else grades.push(base);
   return { ...s, grades };
+}
+
+/** Literales de una competencia en cada periodo. */
+export function compUnitsOf(g: StudentCourseGrade | undefined, compId: string, n: number): Literal[] {
+  const arr = g?.comp?.[compId] || [];
+  return Array.from({ length: n }, (_, i) => (arr[i] as Literal) || '');
+}
+
+/**
+ * Cambia la nota de una competencia en un periodo. El literal del área en ese periodo es el
+ * promedio de sus competencias calificadas, y el final del área es el promedio de los periodos.
+ */
+export function setCompGrade(s: Student, area: string, compId: string, period: number, value: Literal, n: number, teacherName = ''): Student {
+  const grades = [...(s.grades || [])];
+  const idx = grades.findIndex((g) => g.courseId === courseId(area) || g.courseName === area);
+  const base: StudentCourseGrade = idx >= 0 ? { ...grades[idx], comp: { ...(grades[idx].comp || {}) } } : {
+    courseId: courseId(area), courseName: area, teacherName, unit1: '', unit2: '', unit3: '', unit4: '', average: '', status: 'Sin calificar', recentFeedback: '', comp: {},
+  };
+  const list = compUnitsOf(base, compId, n);
+  list[period] = value;
+  base.comp![compId] = list;
+  const periodValues = Object.values(base.comp!).map((v) => (v[period] as Literal) || '');
+  (base as unknown as Record<string, Literal>)[UNIT_KEYS[period]] = averageLiteral(periodValues);
+  base.average = averageLiteral(unitsOf(base, n));
+  base.status = statusOf(base.average);
+  if (teacherName) base.teacherName = teacherName;
+  if (idx >= 0) grades[idx] = base; else grades.push(base);
+  return { ...s, grades };
+}
+
+/** Competencias del área que corresponden al nivel del estudiante. */
+export function areaCompetencias(area: string, level: EducationalLevel) {
+  return competenciasOf(area, level);
 }
 
 export function setFeedback(s: Student, area: string, text: string): Student {
