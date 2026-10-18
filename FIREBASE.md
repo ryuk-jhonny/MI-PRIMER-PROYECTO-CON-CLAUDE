@@ -19,6 +19,8 @@ La app empieza **vacía**. No trae cuentas de prueba ni datos de ejemplo: la pri
 4. Google Analytics es opcional. Puedes desactivarlo.
 5. Pulsa **Crear proyecto** y espera a que termine.
 
+> **Usa una cuenta personal de Gmail.** Las cuentas de colegio, de trabajo o del Estado suelen tener bloqueado crear proyectos o activar servicios de Google Cloud. Si tienes varias cuentas de Google abiertas, hazlo en una ventana de incógnito con una sola cuenta. Si aparece un error que empieza con `IamPermissionDeniedException` o *Permission denied to enable service*, mira [Problemas frecuentes](#problemas-frecuentes).
+
 ## Paso 2. Activa el inicio de sesión con correo
 
 1. En el menú izquierdo entra a **Compilación → Authentication** y pulsa **Comenzar**.
@@ -160,6 +162,7 @@ La primera vez, `npm run test:e2e` puede pedirte instalar el navegador: `npx pla
 
 | Mensaje | Qué hacer |
 |---|---|
+| `IamPermissionDeniedException: Permission denied to enable service [cloudresourcemanager.googleapis.com]` al crear el proyecto | La cuenta con la que entraste no puede activar servicios en ese proyecto. 1) Abre una ventana de incógnito, entra solo con tu Gmail personal y crea un proyecto **nuevo** (no elijas un proyecto de Google Cloud que ya existía). 2) Si el proyecto ya se creó, entra a <https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com>, elige tu proyecto arriba y pulsa **Habilitar**; luego vuelve a la consola de Firebase. 3) Si tampoco te deja, revisa en <https://console.cloud.google.com/iam-admin/iam> que tu cuenta tenga el rol **Propietario**. Si la cuenta es de una organización (colegio o empresa), pide ese rol a su administrador o usa tu Gmail personal. |
 | **Falta conectar la base de datos** | Faltan variables en `.env.local` o en Vercel. Revisa los seis valores y vuelve a desplegar. |
 | **El inicio con correo no está activado en Firebase** | Repite el Paso 2. |
 | **No tienes permiso para hacer esto** | Publica las reglas (Paso 5). Si te acaban de cambiar de rol, cierra sesión y vuelve a entrar. |
