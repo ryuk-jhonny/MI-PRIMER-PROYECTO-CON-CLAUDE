@@ -252,6 +252,37 @@ describe('Asistencia', () => {
   });
 });
 
+describe('Horarios', () => {
+  const sched = (uid: string, extra: Record<string, unknown> = {}) => ({
+    ownerUid: uid, ownerName: uid, updatedAt: '2026-03-10',
+    blocks: [{ id: 'b1', day: 1, start: '08:00', end: '08:45', aula: '1ro Primaria · A', area: 'Matemática' }], ...extra,
+  });
+  it('cada docente guarda solo su horario', async () => {
+    await assertSucceeds(setDoc(doc(db('doc'), 'institutions', IID, 'schedules', 'doc'), sched('doc')));
+    await assertFails(setDoc(doc(db('doc'), 'institutions', IID, 'schedules', 'dir'), sched('dir')));
+    await assertFails(setDoc(doc(db('doc'), 'institutions', IID, 'schedules', 'doc'), sched('dir')));
+    await assertFails(setDoc(doc(db('aux'), 'institutions', IID, 'schedules', 'aux'), sched('aux')));
+    await assertFails(setDoc(doc(db('doc'), 'institutions', IID, 'schedules', 'doc'), sched('doc', { extra: true })));
+  });
+  it('todo el colegio lo ve, otro colegio no', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore() as unknown as Firestore, 'institutions', IID, 'schedules', 'doc'), sched('doc'));
+    });
+    await assertSucceeds(getDocs(collection(db('est'), 'institutions', IID, 'schedules')));
+    await assertSucceeds(getDocs(collection(db('dir'), 'institutions', IID, 'schedules')));
+    await assertFails(getDocs(collection(db('dir2'), 'institutions', IID, 'schedules')));
+    await assertFails(getDocs(collection(anon(), 'institutions', IID, 'schedules')));
+  });
+  it('estudiantes y familias no lo cambian; la dirección puede borrarlo', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore() as unknown as Firestore, 'institutions', IID, 'schedules', 'doc'), sched('doc'));
+    });
+    await assertFails(setDoc(doc(db('est'), 'institutions', IID, 'schedules', 'est'), sched('est')));
+    await assertFails(deleteDoc(doc(db('fam'), 'institutions', IID, 'schedules', 'doc')));
+    await assertSucceeds(deleteDoc(doc(db('dir'), 'institutions', IID, 'schedules', 'doc')));
+  });
+});
+
 describe('Planificación, actividades y evaluación física', () => {
   it('cada docente ve su planificación y la dirección ve todas', async () => {
     await assertSucceeds(getDocs(query(collection(db('doc'), 'institutions', IID, 'plans'), where('ownerUid', '==', 'doc'))));

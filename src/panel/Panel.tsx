@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, BookOpenCheck, CheckCircle2, ClipboardList, Compass, GraduationCap, Home, LogOut, Megaphone, Menu, NotebookPen, ScanLine, Settings, TriangleAlert, Users, X,
+  Activity, BookOpenCheck, CalendarClock, CheckCircle2, ClipboardList, Compass, GraduationCap, Home, LogOut, Megaphone, Menu, NotebookPen, ScanLine, Settings, TriangleAlert, Users, X,
 } from 'lucide-react';
 import { Student } from '../types/education';
 import { DirectorProfile, InstitutionConfig } from '../types/institution';
@@ -23,10 +23,11 @@ import AreaTab from './AreaTab';
 import PlanningTab from './PlanningTab';
 import TasksTab from './TasksTab';
 import FitnessTab from './FitnessTab';
+import ScheduleTab from './ScheduleTab';
 import { AppBackdrop } from './ui';
 import { EASE_OUT, ScrollProgressBar, useAutoReveal, useSpotlight } from '../lib/motionKit';
 
-export type Tab = 'inicio' | 'asistencia' | 'estudiantes' | 'notas' | 'area' | 'planificacion' | 'actividades' | 'fisica' | 'equipo' | 'comunicados' | 'configuracion';
+export type Tab = 'inicio' | 'horario' | 'asistencia' | 'estudiantes' | 'notas' | 'area' | 'planificacion' | 'actividades' | 'fisica' | 'equipo' | 'comunicados' | 'configuracion';
 
 interface NavItem { id: Tab; label: string; icon: typeof Home; roles: StaffRole[]; needsFisica?: boolean }
 
@@ -36,6 +37,7 @@ const NAV: NavItem[] = [
   { id: 'asistencia', label: 'Asistencia QR', icon: ScanLine, roles: ['director', 'docente', 'auxiliar'] },
   { id: 'estudiantes', label: 'Estudiantes', icon: Users, roles: ['director', 'docente', 'auxiliar'] },
   { id: 'notas', label: 'Notas y libretas', icon: BookOpenCheck, roles: ['director', 'docente'] },
+  { id: 'horario', label: 'Horario', icon: CalendarClock, roles: ['director', 'docente'] },
   { id: 'planificacion', label: 'Planificación', icon: NotebookPen, roles: ['director', 'docente'] },
   { id: 'actividades', label: 'Actividades', icon: ClipboardList, roles: ['director', 'docente'] },
   { id: 'fisica', label: 'Evaluación física', icon: Activity, roles: ['docente'], needsFisica: true },
@@ -330,6 +332,7 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
         {current.id === 'asistencia' && <AttendanceTab ctx={ctx} />}
         {current.id === 'estudiantes' && <StudentsTab ctx={ctx} />}
         {current.id === 'notas' && <GradesTab ctx={ctx} />}
+        {current.id === 'horario' && <ScheduleTab ctx={ctx} />}
         {current.id === 'planificacion' && <PlanningTab ctx={ctx} />}
         {current.id === 'actividades' && <TasksTab ctx={ctx} />}
         {current.id === 'fisica' && <FitnessTab ctx={ctx} />}

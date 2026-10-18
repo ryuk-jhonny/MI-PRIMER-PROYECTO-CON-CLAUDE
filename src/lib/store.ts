@@ -6,6 +6,7 @@ import { Student } from '../types/education';
 import { DEFAULT_DIRECTOR_PROFILE, DEFAULT_INSTITUTION_CONFIG, DirectorProfile, InstitutionConfig } from '../types/institution';
 import type { Level } from './cneb';
 import { fb } from './firebase';
+import { ClassBlock, OwnedBlock, TeacherSchedule } from './schedule';
 
 // =====================================================================
 // Tipos compartidos
@@ -520,6 +521,26 @@ export function createStaffStore(me: UserProfile) {
 
     async deletePlan(id: string) { await deleteDoc(sub('plans', id)); },
 
+    // ----- Horarios (un documento por docente) -----
+
+    async listSchedules(): Promise<TeacherSchedule[]> {
+      const snap = await getDocs(col('schedules'));
+      return snap.docs.map((d) => d.data() as TeacherSchedule);
+    },
+
+    async getMySchedule(): Promise<TeacherSchedule | null> {
+      const snap = await getDoc(sub('schedules', me.uid));
+      return snap.exists() ? (snap.data() as TeacherSchedule) : null;
+    },
+
+    async saveMySchedule(blocks: ClassBlock[]): Promise<TeacherSchedule> {
+      const next: TeacherSchedule = { ownerUid: me.uid, ownerName: me.fullName, blocks, updatedAt: nowIso() };
+      await setDoc(sub('schedules', me.uid), clean(next));
+      return next;
+    },
+
+    async deleteSchedule(uid: string) { await deleteDoc(sub('schedules', uid)); },
+
     // ----- Actividades para estudiantes -----
 
     async listTasks(): Promise<Task[]> {
@@ -636,6 +657,15 @@ export function createFamilyStore(me: UserProfile) {
       const cur = await getDoc(ref);
       if (cur.exists()) await updateDoc(ref, { text, submittedAt: nowIso() });
       else await setDoc(ref, { studentId: student.id, studentName: student.fullName, text, submittedAt: nowIso() });
+    },
+
+    /** Las clases de una sección, de todos sus docentes. */
+    async listSectionBlocks(aula: string): Promise<OwnedBlock[]> {
+      const snap = await getDocs(collection(db, 'institutions', iid, 'schedules'));
+      return snap.docs.flatMap((d) => {
+        const t = d.data() as TeacherSchedule;
+        return (t.blocks || []).filter((b) => b.aula === aula).map((b) => ({ ...b, ownerUid: t.ownerUid, ownerName: t.ownerName }));
+      });
     },
 
     async listFitness(studentId: string): Promise<FitnessRecord[]> {

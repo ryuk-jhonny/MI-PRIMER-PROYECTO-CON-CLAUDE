@@ -10,6 +10,8 @@ import { aulaOf, CNEB_AREAS, compUnitsOf, findGrade, formatDay, levelOf, LITERAL
 import { AppBackdrop, Badge, btn, Card, Empty, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
 import FullLoader from '../app/FullLoader';
 import Logo from '../app/Logo';
+import { dayName, nowIn, OwnedBlock, sortBlocks } from '../lib/schedule';
+import { Week } from '../panel/ScheduleTab';
 import { EASE_OUT, ScrollProgressBar, useAutoReveal, useSpotlight } from '../lib/motionKit';
 
 type Tab = 'inicio' | 'notas' | 'asistencia' | 'actividades' | 'comunicados';
@@ -142,11 +144,19 @@ type FStore = ReturnType<typeof createFamilyStore>;
 function Overview({ store, student: s, config, go }: { store: FStore; student: Student; config: InstitutionConfig; go: (t: Tab) => void }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [fitness, setFitness] = useState<FitnessRecord | null>(null);
+  const [blocks, setBlocks] = useState<OwnedBlock[]>([]);
+  const [week, setWeek] = useState(false);
   useEffect(() => {
     store.listTasks(aulaOf(s)).then(setTasks).catch(() => setTasks([]));
+    store.listSectionBlocks(aulaOf(s)).then(setBlocks).catch(() => setBlocks([]));
     store.listFitness(s.id).then((l) => setFitness(l[0] || null)).catch(() => setFitness(null));
   }, [store, s]);
   const overall = overallLiteral(s);
+  // Clases de hoy; si hoy no hay (o es fin de semana), las del siguiente día con clases.
+  const now = nowIn(config.timeZone);
+  const sorted = sortBlocks(blocks);
+  const showDay = sorted.some((b) => b.day === now.day) ? now.day : (sorted.find((b) => b.day > now.day) || sorted[0])?.day;
+  const dayBlocks = sorted.filter((b) => b.day === showDay);
   return (
     <div className="space-y-6 stagger">
       <PageHeader title={s.fullName} subtitle={`${s.gradeLevel} · Sección ${s.section} · ${config.academicYear} · ${config.activePeriod}`} />
@@ -156,6 +166,28 @@ function Overview({ store, student: s, config, go }: { store: FStore; student: S
         <Stat label="Faltas" value={s.absentDays} hint={s.justifiedDays ? `${s.justifiedDays} justificadas` : 'sin justificadas'} icon={UserX} tone="rose" />
         <Stat label="Logro general" value={overall || '—'} hint={overall ? statusOf(overall) : 'Sin calificaciones aún'} icon={BookOpenCheck} tone="sky" />
       </div>
+      {blocks.length > 0 && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-bold text-white">{showDay === now.day ? 'Clases de hoy' : `Clases del ${dayName(showDay || 1).toLowerCase()}`}</h2>
+            <button type="button" onClick={() => setWeek(true)} className={btn.ghost}>Ver semana</button>
+          </div>
+          <ul className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
+            {dayBlocks.map((b) => (
+              <li key={`${b.ownerUid}${b.id}`} className="shrink-0 min-w-36 rounded-xl p-3 bg-slate-950 border border-slate-800">
+                <p className="text-[11px] font-mono text-orange-300">{b.start}–{b.end}</p>
+                <p className="text-sm font-semibold text-white">{b.area}</p>
+                <p className="text-xs text-slate-400 truncate">{b.ownerName}</p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {week && (
+        <Modal title={`Horario de ${aulaOf(s)}`} onClose={() => setWeek(false)} wide>
+          <Week blocks={blocks} showOwner />
+        </Modal>
+      )}
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-5">
           <div className="flex items-center justify-between"><h2 className="font-bold text-white">Actividades</h2><button type="button" onClick={() => go('actividades')} className={btn.ghost}>Ver todas</button></div>
