@@ -189,7 +189,7 @@ function seedDemoAttendance(students: Student[]): AttendanceRecord[] {
     const wd = d.getDay();
     if (wd === 0 || wd === 6) continue;
     added++;
-    const day = d.toISOString().slice(0, 10);
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
     students.forEach((s, i) => {
       const r = (i * 7 + added * 13) % 29;
       const status: AttendanceStatus = r === 0 ? 'Inasistencia' : r < 3 ? 'Tardanza' : r === 3 ? 'Justificada' : 'Puntual';
