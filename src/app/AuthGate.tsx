@@ -1,4 +1,5 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
+import { motion } from 'motion/react';
 import { ArrowLeft, Building2, CheckCircle2, GraduationCap, HeartHandshake, KeyRound, Loader2, LogIn, Mail, ShieldCheck, UserPlus } from 'lucide-react';
 import {
   checkCode, createInstitution, joinWithCode, loadProfile, login, logout, resetPassword, signup, User, watchAuth,
@@ -8,6 +9,7 @@ import { ROLE_LABEL, UserProfile } from '../lib/store';
 import { AREAS, Level, LEVEL_LABEL, LEVELS } from '../lib/cneb';
 import { navigate } from '../lib/router';
 import Logo from './Logo';
+import { AppBackdrop } from '../panel/ui';
 import FullLoader from './FullLoader';
 
 export default function AuthGate({ children }: { children: (me: UserProfile, onLogout: () => void) => ReactNode }) {
@@ -40,8 +42,9 @@ export default function AuthGate({ children }: { children: (me: UserProfile, onL
 
 function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white flex flex-col">
-      <header className="px-4 sm:px-8 h-16 flex items-center justify-between">
+    <div className="relative isolate min-h-screen text-white flex flex-col">
+      <AppBackdrop />
+      <header className="px-4 sm:px-8 h-16 flex items-center justify-between anim-rise">
         <button type="button" onClick={() => navigate('/')} className="flex items-center gap-2 cursor-pointer">
           <Logo className="h-8" light />
         </button>
@@ -49,10 +52,34 @@ function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
           <ArrowLeft className="w-4 h-4" /> Volver al sitio
         </button>
       </header>
-      <main className="flex-1 flex items-start sm:items-center justify-center px-4 py-6 sm:py-10">
-        <div className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} bg-white text-slate-900 rounded-3xl shadow-2xl p-6 sm:p-8 animate-[fadeUp_.35s_ease-out]`}>{children}</div>
+      <main className="flex-1 w-full max-w-6xl mx-auto flex items-start sm:items-center justify-center lg:justify-between gap-12 px-4 py-6 sm:py-10">
+        {!wide && (
+          <section className="hidden lg:block max-w-md stagger" aria-hidden="true">
+            <p className="text-xs font-extrabold tracking-[0.2em] text-orange-400 uppercase">Aprender · Gestionar · Innovar</p>
+            <h2 className="mt-4 font-serif-title text-5xl leading-[1.1] tracking-tight [text-wrap:balance]">
+              Todo tu colegio, <span className="text-brand">en un solo lugar</span>
+            </h2>
+            <p className="mt-5 text-slate-300 leading-relaxed">
+              Asistencia con carnet QR, notas por competencia del CNEB, planificación y comunicados para toda la comunidad educativa.
+            </p>
+            <div className="mt-7 grid grid-cols-2 gap-3">
+              {[
+                { icon: Building2, t: 'Dirección' },
+                { icon: GraduationCap, t: 'Docentes' },
+                { icon: ShieldCheck, t: 'Estudiantes' },
+                { icon: HeartHandshake, t: 'Familias' },
+              ].map(({ icon: I, t }) => (
+                <div key={t} className="lift flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:border-orange-400/40">
+                  <span className="w-9 h-9 rounded-xl bg-orange-500/15 text-orange-300 flex items-center justify-center"><I className="w-5 h-5" /></span>
+                  <span className="text-sm font-semibold">{t}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        <div className={`w-full ${wide ? 'max-w-2xl mx-auto' : 'max-w-md'} bg-white text-slate-900 rounded-3xl shadow-2xl shadow-orange-950/40 ring-1 ring-white/10 p-6 sm:p-8 anim-pop`}>{children}</div>
       </main>
-      <footer className="text-center text-xs text-slate-400 pb-6 px-4">
+      <footer className="text-center text-xs text-slate-400 pb-6 px-4 anim-fade">
         Al usar Ryuk aceptas los{' '}
         <a href="/terminos" onClick={(e) => { e.preventDefault(); navigate('/terminos'); }} className="underline hover:text-white">Términos</a> y la{' '}
         <a href="/privacidad" onClick={(e) => { e.preventDefault(); navigate('/privacidad'); }} className="underline hover:text-white">Política de privacidad</a>.
@@ -63,7 +90,7 @@ function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
 
 const inputCls = 'w-full h-12 px-4 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-600/20 text-base';
 const labelCls = 'block text-sm font-semibold text-slate-700 mb-1.5';
-const primaryBtn = 'w-full h-12 rounded-xl bg-orange-700 hover:bg-orange-800 active:scale-[0.99] text-white font-bold inline-flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer transition';
+const primaryBtn = 'btn-glow w-full h-12 rounded-xl active:scale-[0.99] text-white font-bold inline-flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer transition';
 const chip = (on: boolean) => `h-11 px-4 rounded-xl border-2 font-semibold text-sm cursor-pointer transition ${on ? 'border-orange-700 bg-orange-50 text-orange-800' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`;
 
 function Alert({ kind, children }: { kind: 'error' | 'ok'; children: ReactNode }) {
@@ -112,8 +139,9 @@ function LoginScreen() {
           <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 text-sm font-semibold" role="tablist">
             {(['login', 'signup'] as const).map((m) => (
               <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => { setMode(m); setError(''); setInfo(''); }}
-                className={`h-11 rounded-lg cursor-pointer transition ${mode === m ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>
-                {m === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+                className={`relative h-11 rounded-lg cursor-pointer transition-colors ${mode === m ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>
+                {mode === m && <motion.span layoutId="auth-tab" transition={{ type: 'spring', stiffness: 450, damping: 35 }} className="absolute inset-0 rounded-lg bg-white shadow" />}
+                <span className="relative">{m === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}</span>
               </button>
             ))}
           </div>
@@ -200,12 +228,12 @@ function SetupScreen({ email, loadError, onReady, onLogout }: { email: string; l
             <p className="text-sm text-slate-600 mt-1">Ingresaste como <strong>{email}</strong>. ¿Qué quieres hacer?</p>
           </div>
           {error && <Alert kind="error">{error}</Alert>}
-          <button type="button" onClick={() => setMode('create')} className="w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-orange-600 transition flex gap-4 cursor-pointer">
-            <Building2 className="w-7 h-7 text-orange-700 shrink-0" />
+          <button type="button" onClick={() => setMode('create')} className="lift group w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-orange-600 hover:shadow-lg hover:shadow-orange-600/10 flex gap-4 cursor-pointer">
+            <Building2 className="w-7 h-7 text-orange-700 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6" />
             <span><strong className="block">Registrar mi colegio</strong><span className="text-sm text-slate-600">Soy director(a) o promotor(a) y quiero empezar.</span></span>
           </button>
-          <button type="button" onClick={() => setMode('join')} className="w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-orange-600 transition flex gap-4 cursor-pointer">
-            <KeyRound className="w-7 h-7 text-orange-700 shrink-0" />
+          <button type="button" onClick={() => setMode('join')} className="lift group w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-orange-600 hover:shadow-lg hover:shadow-orange-600/10 flex gap-4 cursor-pointer">
+            <KeyRound className="w-7 h-7 text-orange-700 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6" />
             <span><strong className="block">Unirme con un código</strong><span className="text-sm text-slate-600">Soy docente, personal de puerta, estudiante o familia y el colegio me dio un código.</span></span>
           </button>
           <button type="button" onClick={onLogout} className="w-full text-sm text-slate-500 hover:text-slate-800 min-h-11 cursor-pointer">Cerrar sesión</button>

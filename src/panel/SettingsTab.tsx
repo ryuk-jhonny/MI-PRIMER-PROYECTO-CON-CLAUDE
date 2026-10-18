@@ -33,7 +33,7 @@ export default function SettingsTab({ ctx }: { ctx: PanelCtx }) {
   const periods = periodNames(cfg);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader title="Configuración" subtitle="Datos oficiales del colegio que aparecen en libretas, carnets y documentos."
         actions={<button type="button" onClick={save} disabled={!dirtyCfg && !dirtyProf} className={btn.primary}><Save className="w-4 h-4" /> Guardar cambios</button>} />
 

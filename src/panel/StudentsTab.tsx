@@ -35,7 +35,7 @@ export default function StudentsTab({ ctx }: { ctx: PanelCtx }) {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title="Estudiantes"
         subtitle={`${students.length} estudiantes matriculados${aulas.length ? ` en ${aulas.length} aulas` : ''}`}

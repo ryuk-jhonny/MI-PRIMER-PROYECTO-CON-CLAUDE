@@ -157,3 +157,110 @@
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-fade-up { animation: fadeUp 0.35s ease-out both; }
+
+/* ------------------------------------------------------------------
+   Movimiento de la app (panel, portal y acceso), en la línea de la landing.
+   Las entradas usan fill-mode "backwards": al terminar no dejan transform,
+   así los modales con position: fixed siguen anclados a la pantalla.
+   ------------------------------------------------------------------ */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes shimmer { from { transform: translateX(-120%) skewX(-18deg); } to { transform: translateX(220%) skewX(-18deg); } }
+@keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes ringPulse { 0% { transform: scale(0.9); opacity: 0.55; } 100% { transform: scale(1.6); opacity: 0; } }
+@keyframes gradientPan { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+@keyframes spinSlow { to { transform: rotate(360deg); } }
+
+.anim-rise { animation: riseIn 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.anim-pop { animation: popIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1.1) backwards; }
+.anim-fade { animation: fadeIn 0.5s ease-out backwards; }
+.anim-float { animation: floatY 4s ease-in-out infinite; }
+.anim-spin-slow { animation: spinSlow 14s linear infinite; }
+
+/* Los hijos directos entran en cascada, como las secciones de la landing. */
+.stagger > :not([role='dialog']) { animation: riseIn 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+.stagger > :not([role='dialog']):nth-child(1) { animation-delay: 0.04s; }
+.stagger > :not([role='dialog']):nth-child(2) { animation-delay: 0.1s; }
+.stagger > :not([role='dialog']):nth-child(3) { animation-delay: 0.16s; }
+.stagger > :not([role='dialog']):nth-child(4) { animation-delay: 0.22s; }
+.stagger > :not([role='dialog']):nth-child(5) { animation-delay: 0.28s; }
+.stagger > :not([role='dialog']):nth-child(6) { animation-delay: 0.34s; }
+.stagger > :not([role='dialog']):nth-child(7) { animation-delay: 0.4s; }
+.stagger > :not([role='dialog']):nth-child(n + 8) { animation-delay: 0.46s; }
+
+/* Grillas de tarjetas (estadísticas, listas) y filas de tablas, también en cascada. */
+.stagger .grid > *, .stagger ul > li, .stagger tbody > tr { animation: popIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.stagger .grid > *:nth-child(2), .stagger ul > li:nth-child(2), .stagger tbody > tr:nth-child(2) { animation-delay: 0.06s; }
+.stagger .grid > *:nth-child(3), .stagger ul > li:nth-child(3), .stagger tbody > tr:nth-child(3) { animation-delay: 0.12s; }
+.stagger .grid > *:nth-child(4), .stagger ul > li:nth-child(4), .stagger tbody > tr:nth-child(4) { animation-delay: 0.18s; }
+.stagger .grid > *:nth-child(5), .stagger ul > li:nth-child(5), .stagger tbody > tr:nth-child(5) { animation-delay: 0.24s; }
+.stagger .grid > *:nth-child(6), .stagger ul > li:nth-child(6), .stagger tbody > tr:nth-child(6) { animation-delay: 0.3s; }
+.stagger .grid > *:nth-child(n + 7), .stagger ul > li:nth-child(n + 7), .stagger tbody > tr:nth-child(n + 7) { animation-delay: 0.36s; }
+
+/* Tarjetas: borde con brillo naranja al pasar el mouse. */
+.card-fx { position: relative; transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease; }
+.card-fx::before {
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.55), rgba(245, 158, 11, 0.12) 40%, transparent 60%, rgba(56, 189, 248, 0.25));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; transition: opacity 0.35s ease;
+}
+.card-fx:hover { border-color: rgba(249, 115, 22, 0.25); box-shadow: 0 18px 40px -22px rgba(249, 115, 22, 0.35); }
+.card-fx:hover::before { opacity: 1; }
+
+/* Tarjetas sin modales dentro: además se elevan. */
+.lift { transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.35s ease, border-color 0.3s ease; }
+.lift:hover { transform: translateY(-4px); }
+
+/* Botón principal: degradado de la landing con un destello al pasar el mouse. */
+.btn-glow {
+  position: relative; overflow: hidden; isolation: isolate;
+  background-image: linear-gradient(90deg, #ea580c, #f97316, #f59e0b, #f97316, #ea580c);
+  background-size: 200% 100%;
+  box-shadow: 0 10px 24px -12px rgba(249, 115, 22, 0.75);
+  transition: box-shadow 0.3s ease, transform 0.15s ease, background-position 0.6s ease;
+}
+.btn-glow::after {
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 40%; z-index: -1; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: translateX(-120%) skewX(-18deg);
+}
+.btn-glow:hover { background-position: 100% 50%; box-shadow: 0 14px 30px -12px rgba(249, 115, 22, 0.95); }
+.btn-glow:hover::after { animation: shimmer 0.9s ease; }
+
+/* Texto con el degradado naranja de la marca. */
+.text-brand {
+  background: linear-gradient(90deg, #fb923c, #f59e0b, #fb7185, #fb923c);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: gradientPan 8s linear infinite;
+}
+
+/* Subrayado que crece bajo los títulos. */
+.title-bar { transform-origin: left; animation: growX 0.8s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+
+/* Barras de progreso que se llenan al aparecer. */
+.bar-fill { transform-origin: left; animation: growX 1s 0.25s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+
+/* Anillo que late detrás de un ícono. */
+.ring-pulse::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; border: 2px solid rgba(249, 115, 22, 0.5);
+  animation: ringPulse 2.4s ease-out infinite;
+}
+
+/* Íconos del menú: un pequeño empujón al pasar el mouse. */
+.nav-item svg { transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.nav-item:hover svg { transform: translateX(2px) scale(1.08); }
+
+/* Barra de tiempo de los avisos. */
+@keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.toast-bar { transform-origin: left; animation: drain linear forwards; }

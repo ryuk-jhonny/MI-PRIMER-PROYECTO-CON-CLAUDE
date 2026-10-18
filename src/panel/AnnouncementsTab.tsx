@@ -39,7 +39,7 @@ export default function AnnouncementsTab({ ctx }: { ctx: PanelCtx }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader title="Comunicados" subtitle="Los ven estudiantes y familias en su cuenta y en el portal del carnet." />
 
       {canPublish && (
