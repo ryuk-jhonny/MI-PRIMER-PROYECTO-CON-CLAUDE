@@ -68,7 +68,7 @@ test('sin cuenta no se entra al panel', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Ingresa a tu colegio' })).toBeVisible();
   await page.getByLabel('Correo').fill(mail('nadie'));
   await page.getByLabel('Contraseña').fill('equivocada');
-  await page.getByRole('button', { name: 'Ingresar' }).click();
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText(/incorrectos/);
 });
 
@@ -146,12 +146,37 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   await page.context().close();
 });
 
-test('la familia se une con su código y ve las notas', async ({ browser }) => {
+async function openCarnet(page: Page) {
+  // Lo mismo que pasa al escanear el carnet con la cámara del celular.
+  await page.goto(new URL(portalUrl).pathname);
+  await page.getByRole('link', { name: /Entrar con mi PIN/ }).click();
+  await expect(page.getByRole('heading', { name: 'Ingresa con tu carnet' })).toBeVisible();
+}
+
+async function activateCarnet(page: Page, who: 'estudiante' | 'familia', code: string, pin: string) {
+  await openCarnet(page);
+  if (who === 'familia') await page.getByRole('radio', { name: 'Soy la familia' }).click();
+  await page.getByRole('button', { name: 'Activar mi carnet' }).click();
+  await page.getByLabel(who === 'estudiante' ? 'Código de estudiante' : 'Código de familia').fill(code);
+  await page.getByLabel('Elige un PIN de 6 números').fill(pin);
+  await page.getByLabel('Repite el PIN').fill(pin);
+  await page.getByRole('button', { name: 'Activar e ingresar' }).click();
+  await expect(page.getByText(STUDENT).locator('visible=true').first()).toBeVisible();
+}
+
+test('estudiantes y familias no se registran con correo', async ({ browser }) => {
+  const page = await newPage(browser);
+  await signup(page, mail('familia-correo'));
+  await page.getByRole('button', { name: /Unirme con un código/ }).click();
+  await page.getByLabel('Código').fill(familyCode);
+  await page.getByRole('button', { name: 'Validar código' }).click();
+  await expect(page.getByRole('alert')).toContainText(/carnet QR y su PIN/);
+  await page.context().close();
+});
+
+test('la familia activa el carnet con su código y ve las notas', async ({ browser }) => {
   const page = await newPage(browser, true);
-  await signup(page, mail('familia'));
-  await joinWith(page, familyCode, 'Juan Apoderado');
-  await page.getByRole('button', { name: 'Unirme' }).click();
-  await expect(page.getByText(STUDENT).first()).toBeVisible();
+  await activateCarnet(page, 'familia', familyCode, '246810');
   await noHorizontalScroll(page);
   await page.getByRole('navigation', { name: 'Accesos rápidos' }).getByRole('button', { name: 'Notas' }).click();
   await expect(page.getByRole('heading', { name: 'Matemática' })).toBeVisible();
@@ -159,12 +184,29 @@ test('la familia se une con su código y ve las notas', async ({ browser }) => {
   await page.context().close();
 });
 
-test('el estudiante se une con su propio código', async ({ browser }) => {
-  const page = await newPage(browser);
-  await signup(page, mail('estudiante'));
-  await joinWith(page, studentCode, 'Lucía Quispe');
-  await page.getByRole('button', { name: 'Unirme' }).click();
-  await expect(page.getByText(STUDENT).first()).toBeVisible();
+test('el estudiante activa su carnet y vuelve a entrar con el QR y su PIN', async ({ browser }) => {
+  const page = await newPage(browser, true);
+  await activateCarnet(page, 'estudiante', studentCode, '482913');
+  await noHorizontalScroll(page);
+
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click();
+  await openCarnet(page);
+  await page.getByLabel('PIN').fill('111111');
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
+  await expect(page.getByText(/El PIN no es correcto/)).toBeVisible();
+  await page.getByLabel('PIN').fill('482913');
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
+  await expect(page.getByText(STUDENT).locator('visible=true').first()).toBeVisible();
+
+  // El carnet ya activado no se vuelve a activar con otro PIN.
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click();
+  await openCarnet(page);
+  await page.getByRole('button', { name: 'Activar mi carnet' }).click();
+  await page.getByLabel('Código de estudiante').fill(studentCode);
+  await page.getByLabel('Elige un PIN de 6 números').fill('000000');
+  await page.getByLabel('Repite el PIN').fill('000000');
+  await page.getByRole('button', { name: 'Activar e ingresar' }).click();
+  await expect(page.getByText(/ya (fue|está) activado/i)).toBeVisible();
   await page.context().close();
 });
 
@@ -193,7 +235,7 @@ test('el panel de la dirección funciona en celular', async ({ browser }) => {
   await page.goto('/app');
   await page.getByLabel('Correo').fill(mail('director'));
   await page.getByLabel('Contraseña').fill(PASS);
-  await page.getByRole('button', { name: 'Ingresar' }).click();
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
   await page.getByRole('button', { name: 'Abrir menú' }).click();
   const menu = page.getByRole('dialog', { name: 'Menú' });
   await menu.getByRole('button', { name: 'Equipo docente' }).click();

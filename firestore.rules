@@ -8,7 +8,8 @@ rules_version = '2';
 //   docente    → estudiantes y notas, su planificación, sus actividades
 //   auxiliar   → estudiantes y asistencia
 //   estudiante → solo su ficha, sus notas, su asistencia y sus actividades
-//   familia    → lo mismo que el estudiante, para cada hijo o hija vinculado
+//   familia    → lo mismo que el estudiante, para su hijo o hija
+// Estudiantes y familias entran solo con el carnet QR y un PIN (carnetToken en su perfil).
 // Las familias que escanean el carnet sin cuenta leen portals/{token}, una copia
 // sin DNI, dirección ni teléfono. El token es largo y aleatorio y no se puede listar.
 service cloud.firestore {
@@ -32,8 +33,28 @@ service cloud.firestore {
         && meAfter().institutionId == iid
         && meAfter().role == 'director';
     }
+    function studentDoc(iid, sid) { return get(/databases/$(database)/documents/institutions/$(iid)/students/$(sid)).data; }
+    // Estudiantes y familias entran solo con carnet QR + PIN, y ven la ficha mientras ese carnet
+    // siga vigente: si la dirección genera un QR nuevo, pierden el acceso.
+    function carnetValid(iid, sid) {
+      return 'carnetToken' in me() && studentDoc(iid, sid).get('qrToken', '') == me().carnetToken;
+    }
+    function carnetPath(cid) { return /databases/$(database)/documents/carnets/$(cid); }
+    function pinPath(cid) { return /databases/$(database)/documents/carnetPins/$(cid); }
+    // Perfil de una sesión de carnet: el carnet está activado, sigue vigente y el PIN coincide.
+    function carnetLogin(d) {
+      return request.auth.token.firebase.sign_in_provider == 'anonymous'
+        && d.role in ['estudiante', 'familia']
+        && d.keys().hasOnly(['uid', 'email', 'fullName', 'role', 'institutionId', 'studentIds', 'carnetToken', 'pinProof', 'createdAt'])
+        && d.carnetToken is string && d.pinProof is string
+        && exists(carnetPath(d.carnetToken + '_' + d.role))
+        && get(carnetPath(d.carnetToken + '_' + d.role)).data.institutionId == d.institutionId
+        && d.studentIds == [get(carnetPath(d.carnetToken + '_' + d.role)).data.studentId]
+        && studentDoc(d.institutionId, d.studentIds[0]).get('qrToken', '') == d.carnetToken
+        && hashing.sha256(d.pinProof).toHexString().lower() == get(pinPath(d.carnetToken + '_' + d.role)).data.pinHash;
+    }
     function linked(iid, sid) {
-      return roleIn(iid, ['estudiante', 'familia']) && sid in me().get('studentIds', []);
+      return roleIn(iid, ['estudiante', 'familia']) && sid in me().get('studentIds', []) && carnetValid(iid, sid);
     }
     function sameEmail() {
       return request.resource.data.email == request.auth.token.get('email', '');
@@ -60,26 +81,16 @@ service cloud.firestore {
             && exists(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode))
             && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.institutionId == request.resource.data.institutionId
             && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.role == request.resource.data.role)
-          // Estudiante o familia: con el código de su ficha.
-          || (request.resource.data.role in ['estudiante', 'familia']
-            && exists(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode))
-            && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.institutionId == request.resource.data.institutionId
-            && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.kind == request.resource.data.role
-            && request.resource.data.studentIds == [get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.studentId])
-        );
+          // Estudiante o familia: sesión anónima con el carnet vigente y su PIN.
+          || carnetLogin(request.resource.data)
+        )
+        // El personal entra con correo y no lleva carnet.
+        && (request.resource.data.role in ['estudiante', 'familia']
+          || !request.resource.data.keys().hasAny(['carnetToken', 'pinProof']));
 
       allow update: if signedIn() && request.auth.uid == uid && (
         // Datos propios: nombre, teléfono y carga docente.
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'phone', 'areas', 'levels', 'aulas'])
-        // Familia: vincula a otro hijo con su código de familia.
-        || (resource.data.role == 'familia'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentIds', 'linkCode'])
-          && exists(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode))
-          && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.kind == 'familia'
-          && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.institutionId == resource.data.institutionId
-          && request.resource.data.studentIds.toSet().difference(resource.data.studentIds.toSet())
-              == [get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.studentId].toSet()
-          && resource.data.studentIds.toSet().difference(request.resource.data.studentIds.toSet()).size() == 0)
       );
 
       // La dirección puede quitar el acceso a otras personas de su colegio.
@@ -87,6 +98,31 @@ service cloud.firestore {
         request.auth.uid == uid
         || (resource.data.institutionId == me().institutionId && me().role == 'director' && resource.data.role != 'director')
       );
+    }
+
+    // ---------------- Carnets activados ----------------
+    // carnets: a qué estudiante pertenece cada carnet (se lee conociendo el token, que es secreto).
+    // carnetPins: el hash del PIN; nadie lo lee, solo lo usan estas reglas.
+    // Se crean juntos y una sola vez, con el código de la ficha y el carnet vigente.
+    match /carnets/{cid} {
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['institutionId', 'studentId', 'role', 'createdAt'])
+        && request.resource.data.role in ['estudiante', 'familia']
+        && cid == studentDoc(request.resource.data.institutionId, request.resource.data.studentId).get('qrToken', '') + '_' + request.resource.data.role
+        && existsAfter(pinPath(cid));
+      allow delete: if director(resource.data.institutionId);
+    }
+
+    match /carnetPins/{cid} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['pinHash', 'linkCode'])
+        && request.resource.data.pinHash is string && request.resource.data.pinHash.size() == 64
+        && exists(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode))
+        && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.institutionId == getAfter(carnetPath(cid)).data.institutionId
+        && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.studentId == getAfter(carnetPath(cid)).data.studentId
+        && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.kind == getAfter(carnetPath(cid)).data.role;
+      allow delete: if director(get(carnetPath(cid)).data.institutionId);
     }
 
     // ---------------- Códigos ----------------
