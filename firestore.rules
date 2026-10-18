@@ -32,8 +32,14 @@ service cloud.firestore {
         && meAfter().institutionId == iid
         && meAfter().role == 'director';
     }
+    function studentDoc(iid, sid) { return get(/databases/$(database)/documents/institutions/$(iid)/students/$(sid)).data; }
+    // Las cuentas que entran con carnet QR + PIN solo ven la ficha mientras ese carnet siga vigente:
+    // si la dirección genera un QR nuevo, pierden el acceso.
+    function carnetValid(iid, sid) {
+      return !('carnetToken' in me()) || studentDoc(iid, sid).get('qrToken', '') == me().carnetToken;
+    }
     function linked(iid, sid) {
-      return roleIn(iid, ['estudiante', 'familia']) && sid in me().get('studentIds', []);
+      return roleIn(iid, ['estudiante', 'familia']) && sid in me().get('studentIds', []) && carnetValid(iid, sid);
     }
     function sameEmail() {
       return request.resource.data.email == request.auth.token.get('email', '');
@@ -66,13 +72,18 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.institutionId == request.resource.data.institutionId
             && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.kind == request.resource.data.role
             && request.resource.data.studentIds == [get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.studentId])
-        );
+        )
+        // Cuenta de carnet: el token tiene que ser el del carnet vigente de ese estudiante.
+        && (!('carnetToken' in request.resource.data)
+          || (request.resource.data.role in ['estudiante', 'familia']
+            && studentDoc(request.resource.data.institutionId, request.resource.data.studentIds[0]).get('qrToken', '') == request.resource.data.carnetToken));
 
       allow update: if signedIn() && request.auth.uid == uid && (
         // Datos propios: nombre, teléfono y carga docente.
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'phone', 'areas', 'levels', 'aulas'])
         // Familia: vincula a otro hijo con su código de familia.
         || (resource.data.role == 'familia'
+          && !('carnetToken' in resource.data)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentIds', 'linkCode'])
           && exists(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode))
           && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.kind == 'familia'

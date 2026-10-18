@@ -133,6 +133,7 @@ Firebase solo permite iniciar sesión desde dominios que conoce.
 5. En **Equipo docente** están los códigos de invitación para **docentes** y para el **personal de puerta**. Entrégalos en persona o por WhatsApp. Si un código se filtra, pulsa **Cambiar códigos** y el anterior deja de servir.
 6. Cada docente crea su cuenta, elige **Unirme con un código** y marca las **áreas del CNEB** que enseña y su nivel. Su panel se arma con las competencias de esas áreas. Quien enseña Educación Física ve además la **Evaluación física**.
 7. Estudiantes y familias hacen lo mismo con su código. Una familia con varios hijos usa una sola cuenta y agrega a cada hijo con **Vincular otro hijo(a)**.
+8. **Ingreso con el carnet (sin correo).** Estudiantes y familias también pueden entrar escaneando el QR del carnet y escribiendo un **PIN de 6 números**. Al escanear el carnet se abre su ficha; ahí pulsan **Entrar con mi PIN**. También pueden pulsar **Entrar con mi carnet QR** en la pantalla de ingreso. La primera vez eligen **Activar mi carnet**, escriben su código de estudiante o de familia y crean su PIN. Si alguien olvida el PIN o pierde el carnet, ve a **Editar estudiante** y pulsa **Generar QR nuevo**: el carnet anterior y su PIN dejan de funcionar, y se activa el carnet nuevo.
 
 ## Paso 10 (opcional). Probar sin tocar tu proyecto real
 
@@ -165,6 +166,7 @@ La primera vez, `npm run test:e2e` puede pedirte instalar el navegador: `npx pla
 | `IamPermissionDeniedException: Permission denied to enable service [cloudresourcemanager.googleapis.com]` al crear el proyecto | La cuenta con la que entraste no puede activar servicios en ese proyecto. 1) Abre una ventana de incógnito, entra solo con tu Gmail personal y crea un proyecto **nuevo** (no elijas un proyecto de Google Cloud que ya existía). 2) Si el proyecto ya se creó, entra a <https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com>, elige tu proyecto arriba y pulsa **Habilitar**; luego vuelve a la consola de Firebase. 3) Si tampoco te deja, revisa en <https://console.cloud.google.com/iam-admin/iam> que tu cuenta tenga el rol **Propietario**. Si la cuenta es de una organización (colegio o empresa), pide ese rol a su administrador o usa tu Gmail personal. |
 | **Falta conectar la base de datos** | Faltan variables en `.env.local` o en Vercel. Revisa los seis valores y vuelve a desplegar. |
 | **El inicio con correo no está activado en Firebase** | Repite el Paso 2. |
+| «Este carnet ya no está vigente» | La dirección generó un QR nuevo para ese estudiante. Escanea el carnet nuevo y actívalo otra vez con tu código. |
 | **No tienes permiso para hacer esto** | Publica las reglas (Paso 5). Si te acaban de cambiar de rol, cierra sesión y vuelve a entrar. |
 | `auth/unauthorized-domain` o no puedes iniciar sesión desde Vercel | Agrega el dominio en el Paso 8. |
 | **El código no es válido** | El código se escribió mal o la dirección generó códigos nuevos. Pide el código otra vez. |

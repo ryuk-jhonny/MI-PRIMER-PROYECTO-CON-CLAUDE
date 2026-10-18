@@ -265,6 +265,49 @@ describe('Planificación, actividades y evaluación física', () => {
   });
 });
 
+describe('Ingreso con carnet QR y PIN', () => {
+  const carnetUser = async (uid: string, role: 'estudiante' | 'familia', token: string) => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore() as unknown as Firestore, 'users', uid), {
+        uid, email: `${uid}@prueba.test`, fullName: uid, role, institutionId: IID, studentIds: [SID], carnetToken: token,
+      });
+    });
+  };
+  const profile = (uid: string, extra: Record<string, unknown>) => ({ uid, email: `${uid}@prueba.test`, fullName: 'Persona Nueva', institutionId: IID, ...extra });
+
+  it('se activa con el código de la ficha y el token del carnet vigente', async () => {
+    await assertSucceeds(setDoc(doc(db('qe'), 'users', 'qe'), profile('qe', { role: 'estudiante', linkCode: 'ESTUDIA1', studentIds: [SID], carnetToken: `tok_${SID}` })));
+    await assertSucceeds(setDoc(doc(db('qf'), 'users', 'qf'), profile('qf', { role: 'familia', linkCode: 'FAMILIA1', studentIds: [SID], carnetToken: `tok_${SID}` })));
+  });
+  it('no se activa con el carnet de otro estudiante', async () => {
+    await assertFails(setDoc(doc(db('qe'), 'users', 'qe'), profile('qe', { role: 'estudiante', linkCode: 'ESTUDIA1', studentIds: [SID], carnetToken: `tok_${SID2}` })));
+    await assertFails(setDoc(doc(db('qe'), 'users', 'qe'), profile('qe', { role: 'estudiante', linkCode: 'ESTUDIA1', studentIds: [SID], carnetToken: 'inventado' })));
+  });
+  it('ve su ficha, su asistencia y sus actividades mientras el carnet siga vigente', async () => {
+    await carnetUser('qe', 'estudiante', `tok_${SID}`);
+    await assertSucceeds(getDoc(doc(db('qe'), 'institutions', IID, 'students', SID)));
+    await assertSucceeds(getDocs(query(collection(db('qe'), 'institutions', IID, 'attendance'), where('studentId', '==', SID))));
+    await assertSucceeds(setDoc(doc(db('qe'), 'institutions', IID, 'tasks', 't1', 'responses', SID), { studentId: SID, studentName: 'Uno', text: 'Listo', submittedAt: '2026-03-10' }));
+  });
+  it('un QR nuevo deja sin acceso a las cuentas del carnet anterior', async () => {
+    await carnetUser('qe', 'estudiante', `tok_${SID}`);
+    await carnetUser('qf', 'familia', `tok_${SID}`);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore() as unknown as Firestore, 'institutions', IID, 'students', SID), { qrToken: 'tok_nuevo' });
+    });
+    await assertFails(getDoc(doc(db('qe'), 'institutions', IID, 'students', SID)));
+    await assertFails(getDocs(query(collection(db('qf'), 'institutions', IID, 'attendance'), where('studentId', '==', SID))));
+    await assertFails(setDoc(doc(db('qe'), 'institutions', IID, 'tasks', 't1', 'responses', SID), { studentId: SID, studentName: 'Uno', text: 'Listo', submittedAt: '2026-03-10' }));
+    // Las cuentas con correo no dependen del carnet.
+    await assertSucceeds(getDoc(doc(db('est'), 'institutions', IID, 'students', SID)));
+  });
+  it('una cuenta de carnet no vincula otros hijos ni se quita el carnet', async () => {
+    await carnetUser('qf', 'familia', `tok_${SID}`);
+    await assertFails(updateDoc(doc(db('qf'), 'users', 'qf'), { studentIds: arrayUnion(SID2), linkCode: 'FAMILIA2' }));
+    await assertFails(updateDoc(doc(db('qf'), 'users', 'qf'), { carnetToken: 'tok_nuevo' }));
+  });
+});
+
 describe('Portal del carnet sin cuenta', () => {
   it('cualquiera con el token lo abre, pero nadie lo lista', async () => {
     await assertSucceeds(getDoc(doc(anon(), 'portals', `tok_${SID}`)));

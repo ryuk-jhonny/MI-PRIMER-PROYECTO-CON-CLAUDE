@@ -10,6 +10,8 @@ App web para colegios de **primaria y secundaria** del Perú, basada en el **Cur
 | **Estudiantes** | Ven sus notas por competencia, su asistencia, las actividades de sus docentes (y las responden desde el celular) y los comunicados. |
 | **Familias** | Lo mismo que el estudiante, para cada hijo o hija vinculado a la misma cuenta. Sin cuenta, también pueden escanear el QR del carnet y ver la asistencia y los comunicados. |
 
+Estudiantes y familias pueden entrar con su correo, o **con el carnet QR y un PIN de 6 números**. Un QR nuevo anula el carnet anterior y su PIN.
+
 La app **empieza vacía**: no trae cuentas de prueba ni datos de ejemplo. La primera cuenta que registres será la dirección de tu colegio.
 
 **Para enlazarla con Firebase, sigue [FIREBASE.md](FIREBASE.md).**
@@ -68,7 +70,7 @@ npm run dev:local      # terminal 2: la app conectada a los emuladores
 |---|---|
 | `npm run lint` | Tipos de TypeScript |
 | `npm test` | Promedios CNEB, periodos, códigos, horarios e importación de nóminas |
-| `npm run test:reglas` | 42 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, un auxiliar no pone notas, nadie lista los códigos, el portal no se puede modificar sin sesión, etc. |
+| `npm run test:reglas` | 47 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, un auxiliar no pone notas, nadie lista los códigos, el portal no se puede modificar sin sesión, etc. |
 | `npm run test:e2e` | Recorre la app en Chromium: la dirección registra su colegio y matricula; una docente de Matemática se une y califica; la familia y el estudiante se unen y ven las notas; el portal del carnet se abre sin cuenta; todo revisado también en pantalla de celular |
 | `npm run test:todo` | Todo lo anterior |
 

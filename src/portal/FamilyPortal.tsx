@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { BookOpenCheck, CalendarCheck, Clock, Loader2, Megaphone, ShieldAlert, UserX } from 'lucide-react';
+import { ArrowRight, BookOpenCheck, CalendarCheck, Clock, KeyRound, Loader2, Megaphone, ShieldAlert, UserX } from 'lucide-react';
 import { Student, StudentCourseGrade } from '../types/education';
 import { doc, getDoc } from 'firebase/firestore';
 import { cloudEnabled, fb } from '../lib/firebase';
 import { LogoMark } from '../app/Logo';
 import { formatDay, levelOf } from '../lib/school';
+import { navigate } from '../lib/router';
 
 interface PortalData {
   student: Pick<Student, 'fullName' | 'gradeLevel' | 'section' | 'avatarUrl' | 'grades'>;
@@ -183,9 +184,19 @@ export default function FamilyPortal({ token }: { token: string }) {
           </section>
         )}
 
-        <section className="bg-white rounded-2xl shadow-sm p-5 text-sm text-slate-600">
-          ¿Quieres ver también las actividades y la retroalimentación de los docentes? Pide a la dirección el <strong>código de familia</strong> y crea tu cuenta en{' '}
-          <a href="/app" className="text-orange-700 font-semibold underline">{window.location.host}/app</a>.
+        <section className="relative overflow-hidden rounded-2xl p-5 bg-[#0f172a] text-white shadow-lg">
+          <div aria-hidden="true" className="absolute -top-16 -right-10 w-48 h-48 rounded-full bg-orange-500/30 blur-3xl animate-glow-slow" />
+          <div className="relative flex items-start gap-3">
+            <span className="w-11 h-11 rounded-xl bg-orange-600 flex items-center justify-center shrink-0"><KeyRound className="w-5 h-5" /></span>
+            <div className="min-w-0">
+              <p className="font-bold">¿Eres el estudiante o su familia?</p>
+              <p className="text-sm text-slate-300 mt-0.5">Entra a la app completa con este carnet y tu PIN: notas por competencia, actividades y retroalimentación de los docentes.</p>
+            </div>
+          </div>
+          <a href={`/app#carnet=${token}`} onClick={(e) => { e.preventDefault(); navigate(`/app#carnet=${token}`); }}
+            className="btn-glow relative mt-4 h-12 w-full rounded-xl text-white font-bold inline-flex items-center justify-center gap-2">
+            Entrar con mi PIN <ArrowRight className="w-4 h-4" />
+          </a>
         </section>
 
         <p className="text-center text-[11px] text-slate-500 px-4">

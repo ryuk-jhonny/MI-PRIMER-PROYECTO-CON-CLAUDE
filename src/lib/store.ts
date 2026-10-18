@@ -37,6 +37,8 @@ export interface UserProfile {
   aulas?: string[];
   /** Estudiante (uno) o familia (uno o más hijos). */
   studentIds?: string[];
+  /** Cuentas que entran con el carnet QR y un PIN: el token del carnet con el que se activaron. */
+  carnetToken?: string;
   phone?: string;
   createdAt?: string;
 }

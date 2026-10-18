@@ -68,7 +68,7 @@ test('sin cuenta no se entra al panel', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Ingresa a tu colegio' })).toBeVisible();
   await page.getByLabel('Correo').fill(mail('nadie'));
   await page.getByLabel('Contraseña').fill('equivocada');
-  await page.getByRole('button', { name: 'Ingresar' }).click();
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText(/incorrectos/);
 });
 
@@ -168,6 +168,34 @@ test('el estudiante se une con su propio código', async ({ browser }) => {
   await page.context().close();
 });
 
+test('el estudiante activa su carnet y vuelve a entrar con el QR y su PIN', async ({ browser }) => {
+  const page = await newPage(browser, true);
+  // Lo mismo que pasa al escanear el carnet con la cámara del celular.
+  await page.goto(portalUrl.replace(/^https?:\/\/[^/]+/, ''));
+  await page.getByRole('link', { name: /Entrar con mi PIN/ }).click();
+  await expect(page.getByRole('heading', { name: 'Ingresa con tu carnet' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Activar mi carnet' }).click();
+  await page.getByLabel('Código de estudiante').fill(studentCode);
+  await page.getByLabel('Tu nombre completo').fill('Lucía Quispe');
+  await page.getByLabel('Elige un PIN de 6 números').fill('482913');
+  await page.getByLabel('Repite el PIN').fill('482913');
+  await page.getByRole('button', { name: 'Activar e ingresar' }).click();
+  await expect(page.getByText(STUDENT).first()).toBeVisible();
+  await noHorizontalScroll(page);
+
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click();
+  await page.goto(portalUrl.replace(/^https?:\/\/[^/]+/, ''));
+  await page.getByRole('link', { name: /Entrar con mi PIN/ }).click();
+  await page.getByLabel('PIN').fill('111111');
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
+  await expect(page.getByText(/El PIN no es correcto/)).toBeVisible();
+  await page.getByLabel('PIN').fill('482913');
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
+  await expect(page.getByText(STUDENT).first()).toBeVisible();
+  await page.context().close();
+});
+
 test('un código usado en otro rol o inventado no sirve', async ({ browser }) => {
   const page = await newPage(browser);
   await signup(page, mail('curioso'));
@@ -193,7 +221,7 @@ test('el panel de la dirección funciona en celular', async ({ browser }) => {
   await page.goto('/app');
   await page.getByLabel('Correo').fill(mail('director'));
   await page.getByLabel('Contraseña').fill(PASS);
-  await page.getByRole('button', { name: 'Ingresar' }).click();
+  await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
   await page.getByRole('button', { name: 'Abrir menú' }).click();
   const menu = page.getByRole('dialog', { name: 'Menú' });
   await menu.getByRole('button', { name: 'Equipo docente' }).click();

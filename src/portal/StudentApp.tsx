@@ -32,8 +32,16 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
 
   const load = useCallback(async () => {
     setError('');
-    try { setData(await store.load()); } catch (err) { setError(friendlyError(err)); }
-  }, [store]);
+    try {
+      setData(await store.load());
+    } catch (err) {
+      // Con carnet, un permiso negado significa que la dirección generó un QR nuevo.
+      const denied = (err as { code?: string })?.code === 'permission-denied';
+      setError(profile.carnetToken && denied
+        ? 'Este carnet ya no está vigente: la dirección generó uno nuevo. Escanea tu carnet nuevo y actívalo otra vez.'
+        : friendlyError(err));
+    }
+  }, [store, profile.carnetToken]);
   useEffect(() => { load(); }, [load]);
 
   if (error) {
@@ -94,7 +102,7 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
                 {s.fullName.split(' ').slice(0, 2).join(' ')}
               </button>
             ))}
-            <button type="button" onClick={() => setLinking(true)} className={`${btn.ghost} whitespace-nowrap`}><Plus className="w-4 h-4" /> Vincular otro hijo(a)</button>
+            {!profile.carnetToken && <button type="button" onClick={() => setLinking(true)} className={`${btn.ghost} whitespace-nowrap`}><Plus className="w-4 h-4" /> Vincular otro hijo(a)</button>}
           </div>
         )}
 

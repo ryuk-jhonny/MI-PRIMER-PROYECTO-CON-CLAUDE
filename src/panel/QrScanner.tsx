@@ -5,6 +5,8 @@ import { Camera, CameraOff, Keyboard, SwitchCamera } from 'lucide-react';
 interface Props {
   onCode: (text: string) => void;
   paused?: boolean;
+  /** Texto del botón que envía el código escrito a mano. */
+  submitLabel?: string;
 }
 
 type Detector = { detect: (src: CanvasImageSource) => Promise<{ rawValue: string }[]> };
@@ -13,7 +15,7 @@ type Detector = { detect: (src: CanvasImageSource) => Promise<{ rawValue: string
  * Lector QR continuo con la cámara (celular, tablet o laptop).
  * También acepta lectores USB/Bluetooth que "escriben" el código y pulsan Enter.
  */
-export default function QrScanner({ onCode, paused = false }: Props) {
+export default function QrScanner({ onCode, paused = false, submitLabel = 'Registrar' }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -145,7 +147,7 @@ export default function QrScanner({ onCode, paused = false }: Props) {
           <input id="qr-manual" value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Lector USB o código del carnet"
             className="w-full h-11 pl-9 pr-3 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-orange-500" />
         </div>
-        <button type="submit" className="h-11 px-4 rounded-xl bg-slate-800 border border-slate-700 text-sm font-bold text-white cursor-pointer">Registrar</button>
+        <button type="submit" className="h-11 px-4 rounded-xl bg-slate-800 border border-slate-700 text-sm font-bold text-white cursor-pointer">{submitLabel}</button>
       </form>
     </div>
   );

@@ -1,16 +1,18 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Building2, CheckCircle2, GraduationCap, HeartHandshake, KeyRound, Loader2, LogIn, Mail, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowLeft, Building2, CheckCircle2, GraduationCap, HeartHandshake, IdCard, KeyRound, Loader2, LogIn, Mail, QrCode, ShieldCheck, UserPlus } from 'lucide-react';
 import {
-  checkCode, createInstitution, joinWithCode, loadProfile, login, logout, resetPassword, signup, User, watchAuth,
+  activateCarnet, CarnetWho, carnetActivationDone, checkCode, createInstitution, isPin, joinWithCode, loadProfile, login, loginWithCarnet, logout,
+  resetPassword, signup, takeCarnetFailure, User, watchAuth,
 } from '../lib/accounts';
-import { friendlyError } from '../lib/firebase';
-import { ROLE_LABEL, UserProfile } from '../lib/store';
+import { fb, friendlyError } from '../lib/firebase';
+import { ROLE_LABEL, tokenFromQr, UserProfile } from '../lib/store';
 import { AREAS, Level, LEVEL_LABEL, LEVELS } from '../lib/cneb';
 import { navigate } from '../lib/router';
 import Logo from './Logo';
 import { AppBackdrop } from '../panel/ui';
 import FullLoader from './FullLoader';
+import QrScanner from '../panel/QrScanner';
 
 export default function AuthGate({ children }: { children: (me: UserProfile, onLogout: () => void) => ReactNode }) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -21,7 +23,12 @@ export default function AuthGate({ children }: { children: (me: UserProfile, onL
 
   const refresh = useCallback(async (u: User) => {
     setError('');
-    try { setProfile(await loadProfile(u.uid)); } catch (err) { setError(friendlyError(err)); setProfile(null); }
+    try {
+      // Si se está activando un carnet, el perfil se crea justo después de la cuenta.
+      await carnetActivationDone();
+      if (fb().auth.currentUser?.uid !== u.uid) return;
+      setProfile(await loadProfile(u.uid));
+    } catch (err) { setError(friendlyError(err)); setProfile(null); }
   }, []);
 
   useEffect(() => {
@@ -101,7 +108,19 @@ function Alert({ kind, children }: { kind: 'error' | 'ok'; children: ReactNode }
   );
 }
 
+const carnetFromHash = () => window.location.hash.match(/^#carnet=([a-f0-9]{16,64})$/i)?.[1].toLowerCase() || null;
+
 function LoginScreen() {
+  const [failure] = useState(takeCarnetFailure);
+  // undefined: ingreso con correo · null: carnet sin escanear · texto: token del carnet
+  const [carnet, setCarnet] = useState<string | null | undefined>(() => failure?.token || carnetFromHash() || undefined);
+  if (carnet !== undefined) {
+    return <CarnetScreen token={carnet} initialWho={failure?.who} initialError={failure?.error} onToken={setCarnet} onBack={() => { setCarnet(undefined); if (carnetFromHash()) window.history.replaceState({}, '', '/app'); }} />;
+  }
+  return <EmailLogin onCarnet={() => setCarnet(null)} />;
+}
+
+function EmailLogin({ onCarnet }: { onCarnet: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(() => (window.location.hash === '#crear' ? 'signup' : 'login'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -175,9 +194,133 @@ function LoginScreen() {
           )}
         </div>
 
+        {mode === 'login' && (
+          <button type="button" onClick={onCarnet}
+            className="lift group w-full p-4 rounded-2xl border-2 border-dashed border-orange-300 hover:border-orange-600 bg-orange-50/60 flex items-center gap-3 text-left cursor-pointer">
+            <span className="w-11 h-11 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6"><QrCode className="w-6 h-6" /></span>
+            <span><strong className="block text-slate-900">Entrar con mi carnet QR</strong><span className="text-sm text-slate-600">Estudiantes y familias: escanea el QR y escribe tu PIN.</span></span>
+          </button>
+        )}
+
         <div className="pt-4 border-t border-slate-200 text-sm text-slate-600 flex items-start gap-2">
           <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
           <span>Las familias también pueden ver el avance sin cuenta: basta con escanear el QR del carnet.</span>
+        </div>
+      </div>
+    </Shell>
+  );
+}
+
+function CarnetScreen({ token, initialWho, initialError, onToken, onBack }: {
+  token: string | null; initialWho?: CarnetWho; initialError?: string; onToken: (t: string | null) => void; onBack: () => void;
+}) {
+  const [who, setWho] = useState<CarnetWho>(initialWho || 'estudiante');
+  const [mode, setMode] = useState<'pin' | 'activate'>(initialError ? 'activate' : 'pin');
+  const [pin, setPin] = useState('');
+  const [pin2, setPin2] = useState('');
+  const [code, setCode] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(initialError || '');
+
+  const onScan = (raw: string) => {
+    const t = tokenFromQr(raw);
+    if (t) { setError(''); onToken(t); } else setError('Ese QR no es un carnet de Ryuk.');
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setError('');
+    if (mode === 'activate' && pin !== pin2) { setError('Los dos PIN no coinciden.'); return; }
+    if (!isPin(pin)) { setError('El PIN tiene que tener 6 números.'); return; }
+    setBusy(true);
+    try {
+      if (mode === 'pin') await loginWithCarnet(token, who, pin);
+      else await activateCarnet(token, who, { code, fullName, pin });
+    } catch (err) {
+      setError(friendlyError(err));
+      setBusy(false);
+    }
+  };
+
+  const pinInput = (id: string, value: string, set: (v: string) => void, labelText: string, auto: string) => (
+    <div>
+      <label htmlFor={id} className={labelCls}>{labelText}</label>
+      <input id={id} type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete={auto} required value={value}
+        onChange={(e) => set(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        className={`${inputCls} text-center tracking-[0.6em] font-mono text-xl`} placeholder="••••••" />
+    </div>
+  );
+
+  return (
+    <Shell>
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">{!token ? 'Escanea tu carnet' : mode === 'pin' ? 'Ingresa con tu carnet' : 'Activa tu carnet'}</h1>
+          <p className="text-sm text-slate-600">
+            {!token ? 'Apunta la cámara al código QR de tu carnet escolar.'
+              : mode === 'pin' ? 'Escribe tu PIN de 6 números.'
+                : 'Solo la primera vez: usa el código de acceso que te dio el colegio y elige tu PIN.'}
+          </p>
+        </div>
+
+        {!token ? (
+          <QrScanner onCode={onScan} submitLabel="Usar" />
+        ) : (
+          <>
+            <div className="flex items-center gap-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 anim-pop">
+              <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0"><IdCard className="w-5 h-5" /></span>
+              <span className="min-w-0 flex-1 text-sm"><strong className="block text-emerald-900">Carnet detectado</strong><span className="text-emerald-800">Código terminado en {token.slice(-6).toUpperCase()}</span></span>
+              <button type="button" onClick={() => { onToken(null); setError(''); }} className="text-sm font-semibold text-emerald-800 hover:underline min-h-11 px-1 cursor-pointer">Cambiar</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 text-sm font-semibold" role="radiogroup" aria-label="¿Quién ingresa?">
+              {(['estudiante', 'familia'] as const).map((w) => (
+                <button key={w} type="button" role="radio" aria-checked={who === w} onClick={() => { setWho(w); setError(''); }}
+                  className={`relative h-11 rounded-lg cursor-pointer transition-colors ${who === w ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>
+                  {who === w && <motion.span layoutId="carnet-who" transition={{ type: 'spring', stiffness: 450, damping: 35 }} className="absolute inset-0 rounded-lg bg-white shadow" />}
+                  <span className="relative inline-flex items-center gap-1.5">{w === 'estudiante' ? <GraduationCap className="w-4 h-4" /> : <HeartHandshake className="w-4 h-4" />}{w === 'estudiante' ? 'Soy el estudiante' : 'Soy la familia'}</span>
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={submit} className="space-y-4">
+              {mode === 'activate' && (
+                <>
+                  <div>
+                    <label htmlFor="cc" className={labelCls}>{who === 'estudiante' ? 'Código de estudiante' : 'Código de familia'}</label>
+                    <input id="cc" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className={`${inputCls} font-mono tracking-widest uppercase`} autoComplete="off" placeholder="Lo entrega la dirección" />
+                  </div>
+                  <div>
+                    <label htmlFor="cn" className={labelCls}>{who === 'estudiante' ? 'Tu nombre completo' : 'Nombre del padre, madre o apoderado(a)'}</label>
+                    <input id="cn" required minLength={2} value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} autoComplete="name" />
+                  </div>
+                </>
+              )}
+              {pinInput('pin', pin, setPin, mode === 'pin' ? 'PIN' : 'Elige un PIN de 6 números', mode === 'pin' ? 'current-password' : 'new-password')}
+              {mode === 'activate' && pinInput('pin2', pin2, setPin2, 'Repite el PIN', 'new-password')}
+              {error && <Alert kind="error">{error}</Alert>}
+              <button type="submit" disabled={busy} className={primaryBtn}>
+                {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : mode === 'pin' ? <LogIn className="w-5 h-5" /> : <KeyRound className="w-5 h-5" />}
+                {mode === 'pin' ? 'Ingresar' : 'Activar e ingresar'}
+              </button>
+            </form>
+
+            <p className="text-sm text-center text-slate-600">
+              {mode === 'pin' ? (
+                <>¿Primera vez? <button type="button" onClick={() => { setMode('activate'); setError(''); }} className="text-orange-700 font-semibold hover:underline min-h-11 cursor-pointer">Activar mi carnet</button></>
+              ) : (
+                <>¿Ya lo activaste? <button type="button" onClick={() => { setMode('pin'); setError(''); }} className="text-orange-700 font-semibold hover:underline min-h-11 cursor-pointer">Ingresar con mi PIN</button></>
+              )}
+            </p>
+          </>
+        )}
+
+        <div className="pt-4 border-t border-slate-200 space-y-3">
+          <p className="text-xs text-slate-500 flex items-start gap-2"><ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <span>¿Olvidaste tu PIN o perdiste el carnet? Pide a la dirección un QR nuevo: el anterior deja de funcionar y vuelves a activar el nuevo.</span></p>
+          <button type="button" onClick={onBack} className="w-full text-sm text-slate-600 hover:text-slate-900 min-h-11 inline-flex items-center justify-center gap-1.5 cursor-pointer"><Mail className="w-4 h-4" /> Ingresar con correo</button>
         </div>
       </div>
     </Shell>

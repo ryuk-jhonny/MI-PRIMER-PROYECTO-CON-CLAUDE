@@ -5,7 +5,7 @@ import {
 import { arrayUnion, doc, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { DEFAULT_DIRECTOR_PROFILE, DEFAULT_INSTITUTION_CONFIG, InstitutionConfig } from '../types/institution';
 import type { Level } from './cneb';
-import { fb } from './firebase';
+import { fb, friendlyError } from './firebase';
 import { normalizeCode, randomCode, randomToken, Role, UserProfile } from './store';
 
 export type { User };
@@ -99,7 +99,7 @@ export async function checkCode(raw: string): Promise<JoinInfo & { code: string;
 }
 
 /** Crea la cuenta dentro del colegio con el código recibido. */
-export async function joinWithCode(raw: string, input: { fullName: string; areas?: string[]; levels?: Level[] }): Promise<UserProfile> {
+export async function joinWithCode(raw: string, input: { fullName: string; areas?: string[]; levels?: Level[]; carnetToken?: string }): Promise<UserProfile> {
   const { db } = fb();
   const u = currentUser();
   const info = await checkCode(raw);
@@ -109,6 +109,7 @@ export async function joinWithCode(raw: string, input: { fullName: string; areas
   };
   if (info.role === 'docente') { profile.areas = input.areas || []; profile.levels = input.levels || []; profile.aulas = []; }
   if (info.studentId) profile.studentIds = [info.studentId];
+  if (input.carnetToken) profile.carnetToken = input.carnetToken;
   const data: Record<string, unknown> = { ...profile, [info.kind === 'join' ? 'joinCode' : 'linkCode']: info.code };
   const b = writeBatch(db);
   b.set(doc(db, 'users', u.uid), data);
@@ -124,4 +125,91 @@ export async function linkAnotherChild(me: UserProfile, raw: string): Promise<st
   if (me.studentIds?.includes(info.studentId!)) throw new Error('Ese estudiante ya está vinculado a tu cuenta.');
   await updateDoc(doc(fb().db, 'users', me.uid), { studentIds: arrayUnion(info.studentId), linkCode: info.code });
   return info.studentId!;
+}
+
+// ---------------------------------------------------------------------
+// Ingreso con el carnet QR y un PIN de 6 dígitos.
+// Cada carnet tiene dos cuentas posibles (estudiante y familia) con un correo interno
+// derivado del token del QR; el PIN es su contraseña. Las reglas de Firestore solo
+// dejan leer los datos mientras el token siga siendo el del carnet vigente: si la
+// dirección genera un QR nuevo, esas cuentas dejan de ver la ficha.
+
+export type CarnetWho = 'estudiante' | 'familia';
+
+const CARNET_DOMAIN = 'carnet.example.com';
+const carnetEmail = (token: string, who: CarnetWho) => `${who === 'estudiante' ? 'e' : 'f'}-${token}@${CARNET_DOMAIN}`;
+const carnetPassword = (pin: string) => `ryuk-carnet-${pin}`;
+
+export const isPin = (pin: string) => /^\d{6}$/.test(pin);
+
+function errCode(err: unknown) {
+  return (err as { code?: string })?.code || '';
+}
+
+export async function loginWithCarnet(token: string, who: CarnetWho, pin: string) {
+  if (!isPin(pin)) throw new Error('El PIN tiene 6 números.');
+  try {
+    await signInWithEmailAndPassword(fb().auth, carnetEmail(token, who), carnetPassword(pin));
+  } catch (err) {
+    if (['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-login-credentials'].includes(errCode(err))) {
+      throw new Error('El PIN no es correcto, o este carnet todavía no está activado. Si es la primera vez, pulsa «Activar mi carnet».');
+    }
+    throw err;
+  }
+}
+
+let activation: Promise<unknown> | null = null;
+
+/** Mientras se activa un carnet, la sesión ya existe pero el perfil aún no: AuthGate espera esto antes de cargarlo. */
+export function carnetActivationDone(): Promise<unknown> {
+  return (activation || Promise.resolve()).catch(() => undefined);
+}
+
+let lastFailure: { token: string; who: CarnetWho; error: string } | null = null;
+/** La última activación fallida: la pantalla de ingreso se vuelve a montar al cerrarse la sesión y la retoma. */
+export function takeCarnetFailure() {
+  const f = lastFailure;
+  lastFailure = null;
+  return f;
+}
+
+/** Primera vez: crea la cuenta del carnet con el código de acceso de la ficha y el PIN elegido. */
+export async function activateCarnet(token: string, who: CarnetWho, input: { code: string; fullName: string; pin: string }) {
+  if (!isPin(input.pin)) throw new Error('El PIN tiene que tener 6 números.');
+  if (input.fullName.trim().length < 2) throw new Error('Escribe tu nombre.');
+  const run = (async () => {
+    let created: User;
+    try {
+      created = (await createUserWithEmailAndPassword(fb().auth, carnetEmail(token, who), carnetPassword(input.pin))).user;
+    } catch (err) {
+      if (errCode(err) === 'auth/email-already-in-use') {
+        throw new Error('Este carnet ya está activado. Ingresa con tu PIN. Si lo olvidaste, pide a la dirección un QR nuevo.');
+      }
+      throw err;
+    }
+    try {
+      const info = await checkCode(input.code);
+      if (info.kind !== 'link' || info.role !== who) {
+        throw new Error(who === 'estudiante' ? 'Usa el código de estudiante que te dio el colegio.' : 'Usa el código de familia que te dio el colegio.');
+      }
+      try {
+        await joinWithCode(input.code, { fullName: input.fullName, carnetToken: token });
+      } catch (err) {
+        if (errCode(err) === 'permission-denied') throw new Error('Ese código no corresponde a este carnet.');
+        throw err;
+      }
+    } catch (err) {
+      // Sin perfil la cuenta no sirve: la borramos para poder activar el carnet otra vez.
+      // El error queda guardado antes, porque al cerrarse la sesión la pantalla se vuelve a montar.
+      lastFailure = { token, who, error: friendlyError(err) };
+      await created.delete().catch(() => signOut(fb().auth));
+      throw err;
+    }
+  })();
+  activation = run;
+  try {
+    await run;
+  } finally {
+    if (activation === run) activation = null;
+  }
 }
