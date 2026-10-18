@@ -37,7 +37,7 @@ export default function CommunitySection() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {ROLES.map((r) => (
-              <div key={r.title} className="group rounded-2xl bg-white border border-slate-200/90 p-6 hover:shadow-xl hover:border-orange-300 hover:-translate-y-1 transition-all">
+              <div key={r.title} className="spotlight group rounded-2xl bg-white border border-slate-200/90 p-6 hover:shadow-xl hover:border-orange-300 hover:-translate-y-1 transition-all">
                 <span className={`w-12 h-12 rounded-xl ${r.tone} text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform`}><r.icon className="w-6 h-6" /></span>
                 <h3 className="mt-5 text-lg font-bold text-slate-900 group-hover:text-orange-600 transition-colors">{r.title}</h3>
                 <ul className="mt-3 space-y-2">
@@ -68,7 +68,7 @@ export default function CommunitySection() {
             {areas.map((a) => {
               const comps = competenciasOf(a.name, level);
               return (
-                <div key={a.name} className="group rounded-2xl bg-white border border-slate-200/90 p-5 hover:border-orange-300 hover:shadow-lg transition-all">
+                <div key={a.name} className="spotlight group rounded-2xl bg-white border border-slate-200/90 p-5 hover:border-orange-300 hover:shadow-lg transition-all">
                   <span className={`block h-1.5 w-10 rounded-full bg-gradient-to-r ${a.tone} group-hover:w-16 transition-all duration-300`} />
                   <h3 className="mt-3 font-bold text-slate-900">{a.name}</h3>
                   <ul className="mt-2 space-y-1">

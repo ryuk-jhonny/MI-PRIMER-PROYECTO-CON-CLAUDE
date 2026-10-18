@@ -264,3 +264,32 @@
 /* Barra de tiempo de los avisos. */
 @keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 .toast-bar { transform-origin: left; animation: drain linear forwards; }
+
+/* Luz que sigue al cursor (useSpotlight). En las tarjetas oscuras del panel y en las claras de la landing. */
+.card-fx::after,
+.spotlight::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgba(249, 115, 22, 0.12), transparent 60%);
+  opacity: 0; transition: opacity 0.5s ease;
+}
+.spotlight { position: relative; }
+.card-fx.spot-on::after,
+.spotlight.spot-on::after { opacity: 1; }
+
+/* Revelado al bajar: secciones del panel, la app y la landing (useAutoReveal). */
+.auto-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  filter: blur(6px);
+  transition:
+    opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.auto-reveal.auto-reveal-in { opacity: 1; transform: none; filter: none; }
+@media print {
+  .auto-reveal { opacity: 1 !important; transform: none !important; filter: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auto-reveal { opacity: 1; transform: none; filter: none; transition: none; }
+}

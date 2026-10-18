@@ -8,7 +8,10 @@ import {
   Sparkles,
   ChevronRight
 } from 'lucide-react';
+import { useRef } from 'react';
+import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
 import { navigate } from '../lib/router';
+import { EASE_OUT, MagneticButton, MaskedWords } from '../lib/motionKit';
 
 interface HeroProps {
   onOpenDemoModal: () => void;
@@ -18,6 +21,17 @@ interface HeroProps {
 }
 
 export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateToModule, onOpenAccessModal }: HeroProps) {
+  const reduce = useReducedMotion();
+  const visualRef = useRef<HTMLDivElement>(null);
+  // La foto y la tarjeta flotante se mueven a distinto ritmo al bajar (paralaje).
+  const { scrollYProgress } = useScroll({ target: visualRef, offset: ['start end', 'end start'] });
+  const yBack = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [30, -30]);
+  const yFront = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [70, -70]);
+  const rotate = useTransform(scrollYProgress, [0, 1], reduce ? [0, 0] : [2, -2]);
+  const rise = (delay: number) => (reduce ? {} : {
+    initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.8, delay, ease: EASE_OUT },
+  });
+
   return (
     <section className="relative overflow-hidden pt-8 pb-14 lg:pt-14 lg:pb-20 bg-gradient-to-b from-white via-orange-50/20 to-white">
       {/* Decorative floral/curved background shapes inspired by reference */}
@@ -31,19 +45,19 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
           <div className="lg:col-span-7 flex flex-col items-start space-y-6">
             
             {/* Kicker badge style from reference */}
-            <div className="flex items-center gap-2 text-xs font-extrabold tracking-[0.2em] text-orange-600 uppercase">
+            <motion.div {...rise(0)} className="flex items-center gap-2 text-xs font-extrabold tracking-[0.2em] text-orange-600 uppercase">
               <span>APRENDER</span>
               <span className="text-orange-300">·</span>
               <span>GESTIONAR</span>
               <span className="text-orange-300">·</span>
               <span>INNOVAR</span>
-            </div>
+            </motion.div>
 
             {/* Editorial Serif Headline matching reference */}
             <h1 className="font-serif-title text-4xl sm:text-5xl lg:text-6xl text-slate-900 tracking-tight leading-[1.12] [text-wrap:balance]">
-              Un Futuro Educativo Más Brillante{' '}
+              <MaskedWords text="Un Futuro Educativo Más Brillante" />
               <span className="text-orange-500 relative inline-block">
-                Comienza con Ryuk
+                <MaskedWords text="Comienza con Ryuk" start={0.5} />
                 {/* Sunburst accent lines like in reference */}
                 <svg
                   className="absolute -top-3 -right-6 w-6 h-6 text-orange-400"
@@ -59,12 +73,12 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
             </h1>
 
             {/* Subtitle */}
-            <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl font-sans">
+            <motion.p {...rise(0.55)} className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl font-sans">
               La plataforma para <strong className="text-slate-800 font-semibold">colegios de primaria y secundaria</strong> que une a la dirección, los docentes, los estudiantes y las familias: <strong className="text-slate-800 font-semibold">cada docente trabaja con las competencias de su área del CNEB</strong>, planifica, califica de AD a C, y la asistencia se registra con el <strong className="text-slate-800 font-semibold">carnet QR</strong> desde cualquier celular.
-            </p>
+            </motion.p>
 
             {/* Dual Action Buttons matching reference style */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2 w-full sm:w-auto">
+            <motion.div {...rise(0.7)} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2 w-full sm:w-auto">
               <button
                 onClick={onOpenDemoModal}
                 className="inline-flex items-center justify-center gap-2 px-7 py-4 text-sm font-bold text-white bg-orange-700 hover:bg-orange-800 rounded-full shadow-lg shadow-orange-700/25 active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap"
@@ -82,10 +96,10 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
                 </div>
                 <span>Ver Simulador en Vivo</span>
               </button>
-            </div>
+            </motion.div>
 
             {/* 4 Icon Value Props exactly like the reference */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full pt-4 border-t border-slate-200/80">
+            <motion.div {...rise(0.85)} className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full pt-4 border-t border-slate-200/80">
               <button
                 onClick={() => onNavigateToModule ? onNavigateToModule('portafolio') : onScrollToSimulator()}
                 className="flex flex-col items-center sm:items-start text-center sm:text-left space-y-1 p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group text-left"
@@ -129,25 +143,30 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
                 <h4 className="text-xs font-bold text-slate-900 group-hover:text-purple-600 transition-colors">Notas por competencia</h4>
                 <p className="text-[11px] text-slate-500 leading-tight">Familias y estudiantes al día</p>
               </button>
-            </div>
+            </motion.div>
           </div>
 
           {/* Right Column: Hero Visual with Students and Floating Social Proof (Span 5) */}
-          <div className="lg:col-span-5 relative flex flex-col items-center justify-center">
+          <div ref={visualRef} className="lg:col-span-5 relative flex flex-col items-center justify-center">
 
             {/* Botón Acceder prominente con la misma tonalidad naranja de Solicitar información */}
-            <div className="w-full max-w-[500px] mb-5 flex justify-center lg:justify-end">
-              <button
-                type="button"
+            <motion.div {...rise(0.4)} className="w-full max-w-[500px] mb-5 flex justify-center lg:justify-end">
+              <MagneticButton
                 onClick={() => onOpenAccessModal?.()}
-                className="w-full sm:w-auto px-12 py-4 text-base sm:text-lg font-extrabold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 rounded-full shadow-xl shadow-orange-500/30 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center tracking-wide"
+                className="w-full sm:w-auto px-12 py-4 text-base sm:text-lg font-extrabold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 rounded-full shadow-xl shadow-orange-500/30 transition-colors cursor-pointer flex items-center justify-center tracking-wide"
               >
                 Acceder
-              </button>
-            </div>
+              </MagneticButton>
+            </motion.div>
 
             {/* Main Image Frame */}
-            <div className="relative rounded-3xl overflow-hidden border-[6px] border-white shadow-2xl bg-slate-900 aspect-4/3 w-full max-w-[500px]">
+            <motion.div
+              style={{ y: yBack, rotate }}
+              initial={reduce ? false : { opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1, delay: 0.5, ease: EASE_OUT }}
+              className="relative rounded-3xl overflow-hidden border-[6px] border-white shadow-2xl bg-slate-900 aspect-4/3 w-full max-w-[500px]"
+            >
               <img
                 src="/img/hero-school-students.webp"
                 alt="Estudiantes en uniformes escolares sonriendo en campus moderno institucional Ryuk"
@@ -164,15 +183,20 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                 <span>Primaria y Secundaria · CNEB</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Acceso directo a la demo del panel */}
-            <div
+            <motion.div
               role="link"
               tabIndex={0}
               onKeyDown={(e) => { if (e.key === 'Enter') navigate('/app#crear'); }}
               onClick={() => navigate('/app#crear')}
-              className="absolute -bottom-5 right-4 z-20 bg-white rounded-full p-2 pr-5 border border-slate-200 shadow-xl flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
+              style={{ y: yFront }}
+              initial={reduce ? false : { opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.9, delay: 0.9, ease: EASE_OUT }}
+              whileHover={{ scale: 1.05 }}
+              className="absolute -bottom-5 right-4 z-20 bg-white rounded-full p-2 pr-5 border border-slate-200 shadow-xl flex items-center gap-3 cursor-pointer"
             >
               <div className="flex -space-x-2">
                 <img
@@ -202,7 +226,7 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
               <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
                 <ChevronRight className="w-3.5 h-3.5" />
               </div>
-            </div>
+            </motion.div>
 
           </div>
 

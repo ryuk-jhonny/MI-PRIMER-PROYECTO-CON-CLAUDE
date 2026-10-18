@@ -68,7 +68,7 @@ export default function LifeAndActivities({ onScrollToSimulator, onOpenDemoModal
             <div
               key={index}
               onClick={onScrollToSimulator}
-              className="group rounded-2xl bg-slate-50 border border-slate-200/90 overflow-hidden flex flex-col justify-between hover:shadow-lg hover:border-orange-300 transition-all cursor-pointer"
+              className="spotlight group rounded-2xl bg-slate-50 border border-slate-200/90 overflow-hidden flex flex-col justify-between hover:shadow-lg hover:border-orange-300 transition-all cursor-pointer"
             >
               <div>
                 <div className="relative aspect-4/3 overflow-hidden bg-slate-100">

@@ -6,6 +6,7 @@ import {
   resetPassword, signup, User, watchAuth, CARNET_ONLY,
 } from '../lib/accounts';
 import { fb, friendlyError } from '../lib/firebase';
+import { MaskedWords } from '../lib/motionKit';
 import { ROLE_LABEL, tokenFromQr, UserProfile } from '../lib/store';
 import { AREAS, Level, LEVEL_LABEL, LEVELS } from '../lib/cneb';
 import { navigate } from '../lib/router';
@@ -73,7 +74,7 @@ function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
           <section className="hidden lg:block max-w-md stagger" aria-hidden="true">
             <p className="text-xs font-extrabold tracking-[0.2em] text-orange-400 uppercase">Aprender · Gestionar · Innovar</p>
             <h2 className="mt-4 font-serif-title text-5xl leading-[1.1] tracking-tight [text-wrap:balance]">
-              Todo tu colegio, <span className="text-brand">en un solo lugar</span>
+              <MaskedWords text="Todo tu colegio," /><MaskedWords text="en un solo lugar" className="text-brand" start={0.36} />
             </h2>
             <p className="mt-5 text-slate-300 leading-relaxed">
               Asistencia con carnet QR, notas por competencia del CNEB, planificación y comunicados para toda la comunidad educativa.
