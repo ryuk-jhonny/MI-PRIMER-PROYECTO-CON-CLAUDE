@@ -143,6 +143,30 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   for (let i = 0; i < n; i++) await selects.nth(i).selectOption('A');
   await page.getByRole('button', { name: /^Guardar/ }).first().click();
   await expect(page.getByText(/guardad/i).first()).toBeVisible();
+
+  // Arma su horario: una clase que se cruza con otra no se guarda.
+  await nav.getByRole('button', { name: 'Horario' }).click();
+  await page.getByRole('button', { name: 'Agregar mi primera clase' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Agregar clase' });
+  await sheet.getByLabel('Día').selectOption({ label: 'Lunes' });
+  await sheet.getByLabel('Hora de inicio').fill('08:00');
+  await sheet.getByLabel('Hora de fin').fill('08:45');
+  await sheet.getByLabel('Aula').selectOption({ label: '1ro Primaria · A' });
+  await sheet.getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByText('Clase agregada a tu horario.')).toBeVisible();
+  await expect(page.getByText(/^(Ahora en clase|Tu próxima clase)/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Agregar clase' }).click();
+  const again = page.getByRole('dialog', { name: 'Agregar clase' });
+  await again.getByLabel('Día').selectOption({ label: 'Lunes' });
+  await again.getByLabel('Hora de inicio').fill('08:30');
+  await again.getByLabel('Hora de fin').fill('09:15');
+  await again.getByRole('button', { name: 'Guardar' }).click();
+  await expect(again.getByRole('alert')).toContainText(/Se cruza/);
+  await again.getByRole('button', { name: 'Cancelar' }).click();
+
+  await nav.getByRole('button', { name: 'Inicio' }).click();
+  await expect(page.getByText(/^(Ahora en clase|Tu próxima clase)/)).toBeVisible();
   await page.context().close();
 });
 
@@ -188,6 +212,12 @@ test('el estudiante activa su carnet y vuelve a entrar con el QR y su PIN', asyn
   const page = await newPage(browser, true);
   await activateCarnet(page, 'estudiante', studentCode, '482913');
   await noHorizontalScroll(page);
+  // Ve el horario de su sección, armado por sus docentes.
+  await page.getByRole('button', { name: 'Ver semana' }).click();
+  const week = page.getByRole('dialog', { name: /Horario de 1ro Primaria/ });
+  await expect(week.getByRole('region', { name: 'Lunes' })).toContainText('Matemática');
+  await noHorizontalScroll(page);
+  await week.getByRole('button', { name: 'Cerrar' }).last().click();
 
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
   await openCarnet(page);

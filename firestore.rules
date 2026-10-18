@@ -198,6 +198,16 @@ service cloud.firestore {
         allow delete: if teacher(iid) && (resource.data.ownerUid == request.auth.uid || director(iid));
       }
 
+      // Horario semanal: un documento por docente. Lo ve todo el colegio; cada docente edita el suyo.
+      match /schedules/{uid} {
+        allow read: if member(iid);
+        allow create, update: if teacher(iid) && uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['ownerUid', 'ownerName', 'blocks', 'updatedAt'])
+          && request.resource.data.ownerUid == uid
+          && request.resource.data.blocks is list && request.resource.data.blocks.size() <= 80;
+        allow delete: if (teacher(iid) && uid == request.auth.uid) || director(iid);
+      }
+
       match /tasks/{tid} {
         allow read: if member(iid);
         allow create: if teacher(iid) && request.resource.data.ownerUid == request.auth.uid;

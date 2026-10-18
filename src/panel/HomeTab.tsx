@@ -1,13 +1,22 @@
-import { AlertTriangle, CalendarCheck, ClipboardList, Clock, Compass, Megaphone, NotebookPen, PhoneOff, ScanLine, TrendingDown, UserPlus, Users, UserX } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, BookOpenCheck, CalendarCheck, CalendarClock, ClipboardList, Clock, Compass, Megaphone, NotebookPen, PhoneOff, ScanLine, TrendingDown, UserPlus, Users, UserX } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Avatar, btn, Card, PageHeader, Stat } from './ui';
 import { levelOf } from '../lib/school';
 import { EducationalLevel } from '../types/institution';
 import { areaInfo, competenciasOf, LEVEL_LABEL } from '../lib/cneb';
+import { nextClass, nowIn, TeacherSchedule } from '../lib/schedule';
+import { NextClassCard } from './ScheduleTab';
 
 export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
   const { students, todayRecords, config, me, isDirector } = ctx;
   const role = me.role;
+  const [mySchedule, setMySchedule] = useState<TeacherSchedule | null | undefined>(undefined);
+  useEffect(() => {
+    if (role !== 'docente') return;
+    ctx.store.getMySchedule().then(setMySchedule).catch(() => setMySchedule(null));
+  }, [role, ctx.store]);
+  const next = mySchedule ? nextClass(mySchedule.blocks || [], nowIn(config.timeZone)) : null;
   const byStudent = new Map(todayRecords.map((r) => [r.studentId, r]));
   const present = todayRecords.filter((r) => r.status === 'Puntual' || r.status === 'Tardanza').length;
   const late = todayRecords.filter((r) => r.status === 'Tardanza').length;
@@ -41,6 +50,25 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
           </>
         }
       />
+
+      {role === 'docente' && next && (
+        <NextClassCard next={next} actions={<>
+          <button type="button" onClick={() => ctx.go('notas')} className={btn.secondary}><BookOpenCheck className="w-4 h-4" /> Notas</button>
+          <button type="button" onClick={() => ctx.go('horario')} className={btn.secondary}><CalendarClock className="w-4 h-4" /> Mi horario</button>
+        </>} />
+      )}
+      {role === 'docente' && (mySchedule === null || (mySchedule && !mySchedule.blocks?.length)) && (
+        <Card className="p-5 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <span className="w-11 h-11 rounded-2xl bg-orange-500/15 text-orange-300 flex items-center justify-center"><CalendarClock className="w-5 h-5" /></span>
+            <div>
+              <p className="font-bold text-white">Arma tu horario</p>
+              <p className="text-xs text-slate-400">Así verás aquí tu próxima clase y tus estudiantes sabrán qué toca cada día.</p>
+            </div>
+          </div>
+          <button type="button" onClick={() => ctx.go('horario')} className={btn.primary}>Armar mi horario</button>
+        </Card>
+      )}
 
       {role === 'docente' && (
         <Card className="p-5 sm:p-6">
