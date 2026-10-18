@@ -42,7 +42,7 @@ export default function Footer({ onOpenDemoModal, onScrollToSimulator, onNavigat
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed">
-              Asistencia con código QR, notas CNEB, libretas y comunicados para colegios de inicial, primaria y secundaria.
+              Asistencia con código QR, notas CNEB, libretas y comunicados para colegios de primaria y secundaria.
             </p>
 
             {/* [ENLACES A REDES SOCIALES]: agrégalos aquí cuando existan las cuentas */}
@@ -69,7 +69,7 @@ export default function Footer({ onOpenDemoModal, onScrollToSimulator, onNavigat
                   onClick={() => onNavigateToModule ? onNavigateToModule('portafolio') : onScrollToSimulator()} 
                   className="hover:text-orange-600 transition-colors cursor-pointer text-left"
                 >
-                  Portafolio Docente
+                  Planificación CNEB
                 </button>
               </li>
               <li>
@@ -102,8 +102,7 @@ export default function Footer({ onOpenDemoModal, onScrollToSimulator, onNavigat
               Niveles y Módulos
             </h4>
             <ul className="space-y-1.5 text-slate-500">
-              <li><a href="#modulos" className="hover:text-orange-600 transition-colors">Educación Inicial</a></li>
-              <li><a href="#modulos" className="hover:text-orange-600 transition-colors">Educación Primaria</a></li>
+                            <li><a href="#modulos" className="hover:text-orange-600 transition-colors">Educación Primaria</a></li>
               <li><a href="#modulos" className="hover:text-orange-600 transition-colors">Educación Secundaria</a></li>
               <li><a href="#modulos" className="hover:text-orange-600 transition-colors">Escuelas y Colegios Integrados</a></li>
               <li><a href="#modulos" className="hover:text-orange-600 transition-colors">Redes Escolares</a></li>
@@ -167,7 +166,7 @@ export default function Footer({ onOpenDemoModal, onScrollToSimulator, onNavigat
             <span>·</span>
             <a href="/terminos" onClick={(e) => { e.preventDefault(); navigate('/terminos'); }} className="hover:text-slate-600 py-2">Términos del servicio</a>
             <span>·</span>
-            <a href="/demo" onClick={(e) => { e.preventDefault(); navigate('/demo'); }} className="hover:text-slate-600 py-2">Probar demo</a>
+            <a href="/app" onClick={(e) => { e.preventDefault(); navigate('/app'); }} className="hover:text-slate-600 py-2">Ingresar</a>
           </div>
         </div>
 

@@ -25,7 +25,7 @@ import {
   Check,
   Layers
 } from 'lucide-react';
-import { INITIAL_STUDENTS, TEACHER_PORTFOLIO_ITEMS, CNEB_AREAS } from '../data/mockData';
+import { INITIAL_STUDENTS, TEACHER_PORTFOLIO_ITEMS, CNEB_AREAS } from '../data/landingSamples';
 import { Student, CnebLiteralGrade, StudentCourseGrade, TeacherPortfolioItem, CnebArea } from '../types/education';
 import OfficialGradeReportModal from './OfficialGradeReportModal';
 import CnebPortfolioModal from './CnebPortfolioModal';

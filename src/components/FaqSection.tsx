@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { INSTITUTIONAL_FAQS } from '../data/mockData';
+import { INSTITUTIONAL_FAQS } from '../data/landingSamples';
 
 export default function FaqSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);

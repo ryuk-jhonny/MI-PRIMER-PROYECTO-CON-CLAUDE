@@ -1,5 +1,5 @@
 import { Check, ArrowRight, ShieldCheck, HelpCircle } from 'lucide-react';
-import { INSTITUTION_PLANS } from '../data/mockData';
+import { INSTITUTION_PLANS } from '../data/landingSamples';
 
 interface PricingProps {
   onSelectPlan: (planName: string) => void;

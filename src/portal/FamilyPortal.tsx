@@ -1,37 +1,46 @@
 import { useEffect, useState } from 'react';
 import { BookOpenCheck, CalendarCheck, Clock, Loader2, Megaphone, ShieldAlert, UserX } from 'lucide-react';
 import { Student, StudentCourseGrade } from '../types/education';
-import { supabase, cloudEnabled } from '../lib/supabase';
-import { AttendanceRecord, Announcement, tokenFromQr } from '../lib/store';
+import { doc, getDoc } from 'firebase/firestore';
+import { cloudEnabled, fb } from '../lib/firebase';
 import { LogoMark } from '../app/Logo';
-import { formatDay } from '../lib/school';
+import { formatDay, levelOf } from '../lib/school';
 
 interface PortalData {
-  student: Student;
+  student: Pick<Student, 'fullName' | 'gradeLevel' | 'section' | 'avatarUrl' | 'grades'>;
   counters: { present: number; late: number; absent: number; justified: number };
   institution: { name: string; shortName?: string; academicYear?: string; activePeriod?: string; periodType?: string };
   attendance: { day: string; time: string | null; status: string }[];
-  announcements: { body: string; author: string; at: string }[];
+  announcements: { body: string; author: string; at: string; audience?: string }[];
 }
 
-function loadDemo(token: string): PortalData | null {
+/** Lee la copia pública del carnet (sin DNI, dirección ni teléfono). */
+async function loadPortal(token: string): Promise<PortalData | null> {
+  const { db } = fb();
+  const snap = await getDoc(doc(db, 'portals', token));
+  if (!snap.exists()) return null;
+  const d = snap.data() as {
+    institutionId: string; student?: PortalData['student']; institution?: PortalData['institution'];
+    att?: Record<string, { t: string; s: string }>;
+  };
+  if (!d.student) return null;
+  const attendance = Object.entries(d.att || {}).map(([day, v]) => ({ day, time: v.t || null, status: v.s })).sort((a, b) => b.day.localeCompare(a.day));
+  const counters = { present: 0, late: 0, absent: 0, justified: 0 };
+  attendance.forEach((a) => {
+    if (a.status === 'Puntual') counters.present++;
+    else if (a.status === 'Tardanza') counters.late++;
+    else if (a.status === 'Inasistencia') counters.absent++;
+    else counters.justified++;
+  });
+  let announcements: PortalData['announcements'] = [];
   try {
-    const students = JSON.parse(localStorage.getItem('ryuk_demo_students') || '[]') as Student[];
-    const st = students.find((s) => tokenFromQr(s.qrCodeValue) === token);
-    if (!st) return null;
-    const cfg = JSON.parse(localStorage.getItem('ryuk_demo_config') || 'null') || {};
-    const recs = (JSON.parse(localStorage.getItem('ryuk_demo_attendance') || '[]') as AttendanceRecord[]).filter((r) => r.studentId === st.id).sort((a, b) => b.day.localeCompare(a.day));
-    const anns = JSON.parse(localStorage.getItem('ryuk_demo_announcements') || '[]') as Announcement[];
-    return {
-      student: st,
-      counters: { present: st.presentDays, late: st.lateDays, absent: st.absentDays, justified: Math.max(0, st.totalDays - st.presentDays - st.lateDays - st.absentDays) },
-      institution: { name: cfg.institutionName || 'Colegio de demostración', shortName: cfg.shortName, academicYear: cfg.academicYear || String(new Date().getFullYear()), activePeriod: cfg.activePeriod, periodType: cfg.periodType },
-      attendance: recs.slice(0, 40).map((r) => ({ day: r.day, time: r.time?.slice(0, 5) || null, status: r.status })),
-      announcements: anns.slice(0, 10).map((a) => ({ body: a.body, author: a.authorName, at: a.createdAt })),
-    };
-  } catch {
-    return null;
-  }
+    const b = await getDoc(doc(db, 'boards', d.institutionId));
+    if (b.exists()) {
+      const level = levelOf({ gradeLevel: d.student.gradeLevel });
+      announcements = ((b.data().announcements || []) as PortalData['announcements']).filter((a) => !a.audience || a.audience === 'all' || a.audience === level);
+    }
+  } catch { /* los comunicados son opcionales */ }
+  return { student: d.student, institution: d.institution || { name: '' }, counters, attendance: attendance.slice(0, 60), announcements };
 }
 
 const STATUS: Record<string, string> = {
@@ -50,14 +59,8 @@ export default function FamilyPortal({ token }: { token: string }) {
     let meta = document.querySelector('meta[name="robots"]');
     if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name', 'robots'); document.head.appendChild(meta); }
     meta.setAttribute('content', 'noindex, nofollow');
-    (async () => {
-      const demo = loadDemo(token);
-      if (demo) { setData(demo); return; }
-      if (cloudEnabled && supabase) {
-        const { data: res, error } = await supabase.rpc('get_family_portal', { p_token: token });
-        setData(error ? null : (res as PortalData | null));
-      } else setData(null);
-    })();
+    if (!cloudEnabled) { setData(null); return; }
+    loadPortal(token).then(setData).catch(() => setData(null));
   }, [token]);
 
   if (data === undefined) {
@@ -100,7 +103,7 @@ export default function FamilyPortal({ token }: { token: string }) {
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto px-4 -mt-10 pb-10 space-y-4">
+      <main className="max-w-xl mx-auto px-4 -mt-10 pb-10 space-y-4 animate-fade-up">
         <section className="bg-white rounded-2xl shadow-sm p-5">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Asistencia</p>
           <div className="mt-2 flex items-end justify-between gap-4">
@@ -177,6 +180,11 @@ export default function FamilyPortal({ token }: { token: string }) {
             </ul>
           </section>
         )}
+
+        <section className="bg-white rounded-2xl shadow-sm p-5 text-sm text-slate-600">
+          ¿Quieres ver también las actividades y la retroalimentación de los docentes? Pide a la dirección el <strong>código de familia</strong> y crea tu cuenta en{' '}
+          <a href="/app" className="text-orange-700 font-semibold underline">{window.location.host}/app</a>.
+        </section>
 
         <p className="text-center text-[11px] text-slate-500 px-4">
           Información privada del estudiante. No compartas este enlace ni la foto del carnet. Si lo perdiste, pide a la dirección un carnet nuevo.

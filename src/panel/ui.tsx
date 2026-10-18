@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { LucideIcon } from 'lucide-react';
+import { ReactNode, useEffect } from 'react';
+import { LucideIcon, X } from 'lucide-react';
 
 export const btn = {
   primary: 'h-11 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-sm font-bold inline-flex items-center justify-center gap-2 cursor-pointer transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed',
@@ -76,3 +76,26 @@ export function Avatar({ src, name, className = 'w-10 h-10' }: { src?: string; n
     <span className={`${className} rounded-xl bg-slate-800 text-slate-300 text-xs font-bold flex items-center justify-center shrink-0`} aria-hidden="true">{ini}</span>
   );
 }
+
+export function Modal({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-950/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={title}>
+      <button type="button" aria-label="Cerrar" className="absolute inset-0 cursor-default" onClick={onClose} tabIndex={-1} />
+      <div className={`relative w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-slate-900 border border-slate-800 p-5 sm:p-6 space-y-4 animate-fade-up`}>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="w-9 h-9 -mt-1 -mr-1 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"><X className="w-5 h-5" /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export const label = 'block text-xs font-semibold text-slate-300 mb-1.5';
+export const textarea = 'w-full p-3 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20';

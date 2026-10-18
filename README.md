@@ -1,10 +1,12 @@
 # MI PRIMER PROYECTO CON CLAUDE
 
-**Ryuk · Gestión escolar**: asistencia con carnet QR, notas CNEB, libretas, comunicados y portal para familias.
+**Ryuk · Gestión escolar CNEB** para primaria y secundaria: dirección, docentes de cada área, estudiantes y familias en una sola app. Incluye asistencia con carnet QR, notas por competencia, planificación, actividades, evaluación física y comunicados.
 
-La guía completa (cómo probarla, publicarla y qué falta) está en [LEEME.md](LEEME.md).
+- Guía completa: [LEEME.md](LEEME.md)
+- Cómo enlazarla con Firebase: [FIREBASE.md](FIREBASE.md)
 
 ```bash
 npm install
+cp .env.example .env.local   # datos de tu proyecto de Firebase
 npm run dev
 ```

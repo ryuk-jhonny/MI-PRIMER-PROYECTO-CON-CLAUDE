@@ -60,7 +60,7 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
 
             {/* Subtitle */}
             <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl font-sans">
-              La plataforma para <strong className="text-slate-800 font-semibold">colegios de inicial, primaria y secundaria</strong>: registra la <strong className="text-slate-800 font-semibold">asistencia con el carnet QR</strong> desde cualquier celular, pon <strong className="text-slate-800 font-semibold">notas con la escala del CNEB</strong>, imprime libretas y deja que las familias vean todo con solo escanear el carnet.
+              La plataforma para <strong className="text-slate-800 font-semibold">colegios de primaria y secundaria</strong> que une a la dirección, los docentes, los estudiantes y las familias: <strong className="text-slate-800 font-semibold">cada docente trabaja con las competencias de su área del CNEB</strong>, planifica, califica de AD a C, y la asistencia se registra con el <strong className="text-slate-800 font-semibold">carnet QR</strong> desde cualquier celular.
             </p>
 
             {/* Dual Action Buttons matching reference style */}
@@ -69,7 +69,7 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
                 onClick={onOpenDemoModal}
                 className="inline-flex items-center justify-center gap-2 px-7 py-4 text-sm font-bold text-white bg-orange-700 hover:bg-orange-800 rounded-full shadow-lg shadow-orange-700/25 active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap"
               >
-                <span>Solicitar Demostración</span>
+                <span>Solicitar información</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
@@ -93,8 +93,8 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
                 <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
                   <BookOpen className="w-5 h-5" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-900 group-hover:text-orange-600 transition-colors">Portafolio CNEB</h4>
-                <p className="text-[11px] text-slate-500 leading-tight">Próximamente</p>
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-orange-600 transition-colors">Planificación CNEB</h4>
+                <p className="text-[11px] text-slate-500 leading-tight">Unidades y sesiones por área</p>
               </button>
 
               <button
@@ -104,8 +104,8 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
                   <Users className="w-5 h-5" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">Docentes Conectados</h4>
-                <p className="text-[11px] text-slate-500 leading-tight">Carga ágil de calificaciones</p>
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">Un panel por área</h4>
+                <p className="text-[11px] text-slate-500 leading-tight">Para docentes de las 11 áreas</p>
               </button>
 
               <button
@@ -126,8 +126,8 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
                 <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-1 group-hover:scale-105 transition-transform">
                   <Globe className="w-5 h-5" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-900 group-hover:text-purple-600 transition-colors">Notas en Tiempo Real</h4>
-                <p className="text-[11px] text-slate-500 leading-tight">Libreta digital para móviles</p>
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-purple-600 transition-colors">Notas por competencia</h4>
+                <p className="text-[11px] text-slate-500 leading-tight">Familias y estudiantes al día</p>
               </button>
             </div>
           </div>
@@ -135,7 +135,7 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
           {/* Right Column: Hero Visual with Students and Floating Social Proof (Span 5) */}
           <div className="lg:col-span-5 relative flex flex-col items-center justify-center">
 
-            {/* Botón Acceder prominente con la misma tonalidad naranja de Solicitar Demostración */}
+            {/* Botón Acceder prominente con la misma tonalidad naranja de Solicitar información */}
             <div className="w-full max-w-[500px] mb-5 flex justify-center lg:justify-end">
               <button
                 type="button"
@@ -162,7 +162,7 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
               {/* Institution Crest watermark in top-left */}
               <div className="absolute top-4 left-4 flex items-center gap-2 bg-slate-900/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20 text-white text-xs font-semibold">
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Inicial, Primaria y Secundaria</span>
+                <span>Primaria y Secundaria · CNEB</span>
               </div>
             </div>
 
@@ -170,8 +170,8 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
             <div
               role="link"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') navigate('/demo'); }}
-              onClick={() => navigate('/demo')}
+              onKeyDown={(e) => { if (e.key === 'Enter') navigate('/app#crear'); }}
+              onClick={() => navigate('/app#crear')}
               className="absolute -bottom-5 right-4 z-20 bg-white rounded-full p-2 pr-5 border border-slate-200 shadow-xl flex items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
             >
               <div className="flex -space-x-2">
@@ -193,10 +193,10 @@ export default function Hero({ onOpenDemoModal, onScrollToSimulator, onNavigateT
               </div>
               <div className="text-left">
                 <div className="text-xs font-extrabold text-slate-900 leading-none">
-                  Prueba el panel
+                  Registra tu colegio
                 </div>
                 <div className="text-[10px] text-slate-500 font-medium">
-                  Demo gratis, sin registrarte
+                  Empieza vacío, con tus propios datos
                 </div>
               </div>
               <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">

@@ -69,7 +69,7 @@ export function Privacy() {
 
       <h2>5. Dónde se guardan</h2>
       <p>
-        La información se aloja en servidores de Supabase (base de datos) y Vercel (publicación de la aplicación), ubicados en <P>[REGIÓN DEL SERVIDOR, p. ej. São Paulo, Brasil]</P>.
+        La información se aloja en Firebase de Google (base de datos y cuentas) y Vercel (publicación de la aplicación), ubicados en <P>[REGIÓN DEL SERVIDOR, p. ej. São Paulo, Brasil]</P>.
         Esto constituye un flujo transfronterizo de datos, que se informa a la Autoridad Nacional de Protección de Datos Personales cuando corresponde.
       </p>
 

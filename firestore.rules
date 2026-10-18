@@ -1,0 +1,195 @@
+rules_version = '2';
+
+// Ryuk · reglas de seguridad de Firestore
+//
+// Cada colegio vive en institutions/{iid}. Solo entran las personas cuyo perfil
+// (users/{uid}) apunta a ese colegio, y cada rol ve y cambia solo lo que le toca:
+//   director   → todo su colegio
+//   docente    → estudiantes y notas, su planificación, sus actividades
+//   auxiliar   → estudiantes y asistencia
+//   estudiante → solo su ficha, sus notas, su asistencia y sus actividades
+//   familia    → lo mismo que el estudiante, para cada hijo o hija vinculado
+// Las familias que escanean el carnet sin cuenta leen portals/{token}, una copia
+// sin DNI, dirección ni teléfono. El token es largo y aleatorio y no se puede listar.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function hasProfile() { return signedIn() && exists(userPath(request.auth.uid)); }
+    function me() { return get(userPath(request.auth.uid)).data; }
+    function meAfter() { return getAfter(userPath(request.auth.uid)).data; }
+
+    function member(iid) { return hasProfile() && me().institutionId == iid; }
+    function roleIn(iid, roles) { return member(iid) && me().role in roles; }
+    function staff(iid) { return roleIn(iid, ['director', 'docente', 'auxiliar']); }
+    function teacher(iid) { return roleIn(iid, ['director', 'docente']); }
+    function director(iid) { return roleIn(iid, ['director']); }
+    // Para escrituras en lote donde el perfil del director se crea en el mismo lote.
+    function directorAfter(iid) {
+      return signedIn()
+        && existsAfter(userPath(request.auth.uid))
+        && meAfter().institutionId == iid
+        && meAfter().role == 'director';
+    }
+    function linked(iid, sid) {
+      return roleIn(iid, ['estudiante', 'familia']) && sid in me().get('studentIds', []);
+    }
+    function sameEmail() {
+      return request.resource.data.email == request.auth.token.get('email', '');
+    }
+
+    // ---------------- Perfiles ----------------
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow read: if signedIn()
+        && resource.data.institutionId == me().institutionId
+        && me().role == 'director';
+
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && sameEmail()
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() > 1
+        && (
+          // Director(a): el colegio se crea en el mismo lote y es suyo.
+          (request.resource.data.role == 'director'
+            && getAfter(/databases/$(database)/documents/institutions/$(request.resource.data.institutionId)).data.ownerUid == uid)
+          // Docente o personal: con un código de invitación vigente.
+          || (request.resource.data.role in ['docente', 'auxiliar']
+            && exists(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode))
+            && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.institutionId == request.resource.data.institutionId
+            && get(/databases/$(database)/documents/joinCodes/$(request.resource.data.joinCode)).data.role == request.resource.data.role)
+          // Estudiante o familia: con el código de su ficha.
+          || (request.resource.data.role in ['estudiante', 'familia']
+            && exists(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode))
+            && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.institutionId == request.resource.data.institutionId
+            && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.kind == request.resource.data.role
+            && request.resource.data.studentIds == [get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.studentId])
+        );
+
+      allow update: if signedIn() && request.auth.uid == uid && (
+        // Datos propios: nombre, teléfono y carga docente.
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'phone', 'areas', 'levels', 'aulas'])
+        // Familia: vincula a otro hijo con su código de familia.
+        || (resource.data.role == 'familia'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['studentIds', 'linkCode'])
+          && exists(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode))
+          && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.kind == 'familia'
+          && get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.institutionId == resource.data.institutionId
+          && request.resource.data.studentIds.toSet().difference(resource.data.studentIds.toSet())
+              == [get(/databases/$(database)/documents/linkCodes/$(request.resource.data.linkCode)).data.studentId].toSet()
+          && resource.data.studentIds.toSet().difference(request.resource.data.studentIds.toSet()).size() == 0)
+      );
+
+      // La dirección puede quitar el acceso a otras personas de su colegio.
+      allow delete: if signedIn() && (
+        request.auth.uid == uid
+        || (resource.data.institutionId == me().institutionId && me().role == 'director' && resource.data.role != 'director')
+      );
+    }
+
+    // ---------------- Códigos ----------------
+    // Se leen uno por uno (hay que conocer el código); nadie puede listarlos.
+    match /joinCodes/{code} {
+      allow get: if signedIn();
+      allow create: if directorAfter(request.resource.data.institutionId)
+        && request.resource.data.role in ['docente', 'auxiliar'];
+      allow delete: if director(resource.data.institutionId);
+    }
+
+    match /linkCodes/{code} {
+      allow get: if signedIn();
+      allow create: if director(request.resource.data.institutionId)
+        && request.resource.data.kind in ['estudiante', 'familia'];
+      allow delete: if director(resource.data.institutionId);
+    }
+
+    // ---------------- Portal del carnet (sin cuenta) ----------------
+    match /portals/{token} {
+      allow get: if true;
+      allow create, update: if staff(request.resource.data.institutionId)
+        && (resource == null || resource.data.institutionId == request.resource.data.institutionId);
+      allow delete: if director(resource.data.institutionId);
+    }
+
+    match /boards/{iid} {
+      allow get: if true;
+      allow create, update: if (directorAfter(iid) || teacher(iid)) && request.resource.data.institutionId == iid;
+    }
+
+    // ---------------- Colegio ----------------
+    match /institutions/{iid} {
+      allow read: if member(iid);
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if director(iid) && request.resource.data.ownerUid == resource.data.ownerUid;
+
+      match /private/{docId} {
+        allow read: if director(iid);
+        allow write: if directorAfter(iid);
+      }
+
+      match /students/{sid} {
+        allow read: if staff(iid) || linked(iid, sid);
+        allow create, delete: if director(iid);
+        // Docentes: notas y contadores. Auxiliares: solo los contadores de asistencia.
+        allow update: if director(iid)
+          || (teacher(iid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'grades', 'updatedAt', 'presentDays', 'lateDays', 'absentDays', 'justifiedDays', 'totalDays']))
+          || (staff(iid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'updatedAt', 'presentDays', 'lateDays', 'absentDays', 'justifiedDays', 'totalDays']));
+      }
+
+      match /attendance/{rid} {
+        allow read: if staff(iid) || linked(iid, resource.data.studentId);
+        allow create: if staff(iid) && rid == request.resource.data.day + '_' + request.resource.data.studentId;
+        allow update: if roleIn(iid, ['director', 'auxiliar'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'editedBy', 'editedAt']);
+        allow delete: if director(iid);
+      }
+
+      match /announcements/{aid} {
+        allow read: if member(iid);
+        allow create: if teacher(iid) && request.resource.data.authorUid == request.auth.uid;
+        allow delete: if director(iid) || (teacher(iid) && resource.data.authorUid == request.auth.uid);
+      }
+
+      match /plans/{pid} {
+        allow read: if director(iid) || (teacher(iid) && resource.data.ownerUid == request.auth.uid);
+        allow create: if teacher(iid) && request.resource.data.ownerUid == request.auth.uid;
+        allow update: if teacher(iid) && (resource.data.ownerUid == request.auth.uid || director(iid))
+          && request.resource.data.ownerUid == resource.data.ownerUid;
+        allow delete: if teacher(iid) && (resource.data.ownerUid == request.auth.uid || director(iid));
+      }
+
+      match /tasks/{tid} {
+        allow read: if member(iid);
+        allow create: if teacher(iid) && request.resource.data.ownerUid == request.auth.uid;
+        allow update: if teacher(iid) && (resource.data.ownerUid == request.auth.uid || director(iid))
+          && request.resource.data.ownerUid == resource.data.ownerUid;
+        allow delete: if teacher(iid) && (resource.data.ownerUid == request.auth.uid || director(iid));
+
+        match /responses/{sid} {
+          allow read: if teacher(iid) || linked(iid, sid);
+          // Solo el estudiante (o su familia) envía su respuesta.
+          allow create: if linked(iid, sid)
+            && request.resource.data.studentId == sid
+            && request.resource.data.keys().hasOnly(['studentId', 'studentName', 'text', 'submittedAt'])
+            && request.resource.data.text is string && request.resource.data.text.size() <= 5000;
+          allow update: if (linked(iid, sid)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'submittedAt'])
+              && request.resource.data.text.size() <= 5000)
+            || (teacher(iid)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['feedback', 'literal', 'reviewedAt', 'reviewer']));
+          allow delete: if teacher(iid);
+        }
+      }
+
+      match /fitness/{rid} {
+        allow read: if staff(iid) || linked(iid, resource.data.studentId);
+        allow create: if teacher(iid) && request.resource.data.ownerUid == request.auth.uid;
+        allow delete: if teacher(iid) && (resource.data.ownerUid == request.auth.uid || director(iid));
+      }
+    }
+  }
+}

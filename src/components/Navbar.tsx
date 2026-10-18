@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, ChevronRight, Sparkles, Search, LogIn, LogOut, User } from 'lucide-react';
+import { Menu, X, ChevronRight, Sparkles, LogIn } from 'lucide-react';
+import { navigate } from '../lib/router';
+
+const DESKTOP_LINKS = [
+  { key: 'comunidad', label: 'Comunidad' },
+  { key: 'areas-cneb', label: 'Áreas CNEB' },
+  { key: 'modulos', label: 'Módulos' },
+  { key: 'asistencia-qr', label: 'Asistencia QR', module: true },
+];
 
 interface NavbarProps {
   onOpenDemoModal: () => void;
@@ -23,6 +31,8 @@ export default function Navbar({
       const scrollPos = window.scrollY + 160;
 
       const sections = [
+        { id: 'comunidad', key: 'comunidad' },
+        { id: 'areas-cneb', key: 'areas-cneb' },
         { id: 'planes', key: 'planes' },
         { id: 'simulador', key: 'simulador' },
         { id: 'campus', key: 'campus' },
@@ -104,7 +114,7 @@ export default function Navbar({
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-6 h-20">
+        <div className="flex items-center justify-between gap-3 sm:gap-6 h-20">
           
           {/* Zone 1: Brand Wordmark with School Emblem */}
           <a 
@@ -113,9 +123,9 @@ export default function Navbar({
               e.preventDefault();
               handleNavClick('inicio', '#');
             }}
-            className="flex items-center gap-3 whitespace-nowrap shrink-0 group"
+            className="flex items-center gap-2.5 sm:gap-3 whitespace-nowrap min-w-0 group"
           >
-            <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-amber-500 via-orange-500 to-red-500 p-0.5 shadow-sm flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full bg-gradient-to-tr from-amber-500 via-orange-500 to-red-500 p-0.5 shadow-sm flex items-center justify-center">
               <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
                 <svg
                   className="w-6 h-6 text-orange-500"
@@ -130,115 +140,36 @@ export default function Navbar({
                 </svg>
               </div>
             </div>
-            <div className="flex flex-col">
-              <span className="text-xl font-bold tracking-tight text-slate-900 group-hover:text-orange-600 transition-colors">
+            <div className="flex flex-col min-w-0">
+              <span className="text-base sm:text-xl font-bold tracking-tight truncate text-slate-900 group-hover:text-orange-600 transition-colors">
                 Sistema Institucional <span className="text-orange-500 font-extrabold">Ryuk</span>
               </span>
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider truncate">
                 Gestión escolar en la nube
               </span>
             </div>
           </a>
 
           {/* Zone 2: Navigation Links with UNIFORM styling */}
-          <nav className="hidden xl:flex items-center gap-7">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavClick('inicio', '#');
-              }}
-              className={getLinkClass('inicio')}
-            >
-              Inicio
-            </a>
-
-            <a
-              href="#modulos"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavClick('modulos', '#modulos');
-              }}
-              className={getLinkClass('modulos')}
-            >
-              Módulos
-            </a>
-
-            <a
-              href="#portafolio"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavClick('portafolio', undefined, 'portafolio');
-              }}
-              className={getLinkClass('portafolio')}
-            >
-              Portafolio Docente (pronto)
-            </a>
-
-            <a
-              href="#asistencia-qr"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavClick('asistencia-qr', undefined, 'asistencia-qr');
-              }}
-              className={getLinkClass('asistencia-qr')}
-            >
-              Asistencia QR
-            </a>
-
-            <a
-              href="#registro-notas"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavClick('registro-notas', undefined, 'registro-notas');
-              }}
-              className={getLinkClass('registro-notas')}
-            >
-              Notas en Tiempo Real
-            </a>
-
-            <a
-              href="#campus"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavClick('campus', '#campus');
-              }}
-              className={getLinkClass('campus')}
-            >
-              Campus & App
-            </a>
-
-            <button
-              onClick={() => handleNavClick('simulador')}
-              className={`${getLinkClass('simulador')} flex items-center gap-1.5 cursor-pointer`}
-            >
+          <nav className="hidden xl:flex items-center gap-6">
+            {DESKTOP_LINKS.map((l) => (
+              <a key={l.key} href={`#${l.key}`}
+                onClick={(e) => { e.preventDefault(); if (l.module) handleNavClick(l.key, undefined, l.key); else handleNavClick(l.key, `#${l.key}`); }}
+                className={getLinkClass(l.key)}>
+                {l.label}
+              </a>
+            ))}
+            <button type="button" onClick={() => handleNavClick('simulador')} className={`${getLinkClass('simulador')} flex items-center gap-1.5 cursor-pointer`}>
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Simulador en Vivo</span>
+              <span>Simulador</span>
             </button>
-
-            <a
-              href="#planes"
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavClick('planes', '#planes');
-              }}
-              className={getLinkClass('planes')}
-            >
+            <a href="#planes" onClick={(e) => { e.preventDefault(); handleNavClick('planes', '#planes'); }} className={getLinkClass('planes')}>
               Planes
             </a>
           </nav>
 
-          {/* Zone 3: Search affordance + Acceder + Coral CTA Button */}
+          {/* Zone 3: Acceder + CTA */}
           <div className="hidden sm:flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => handleNavClick('simulador')}
-              className="p-2 text-slate-500 hover:text-slate-800 transition-colors rounded-full hover:bg-slate-100 cursor-pointer"
-              title="Explorar simulador"
-              aria-label="Buscar"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-
             <button
               type="button"
               onClick={() => onOpenAccessModal?.()}
@@ -249,16 +180,17 @@ export default function Navbar({
             </button>
 
             <button
-              onClick={onOpenDemoModal}
+              type="button"
+              onClick={() => navigate('/app#crear')}
               className="px-5 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 rounded-full shadow-md shadow-orange-500/25 active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-2"
             >
-              <span>Solicitar Demo</span>
+              <span>Registrar mi colegio</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
           {/* Mobile hamburger */}
-          <div className="flex xl:hidden">
+          <div className="flex xl:hidden shrink-0">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -287,6 +219,28 @@ export default function Navbar({
             </a>
 
             <a
+              href="#comunidad"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavClick('comunidad', '#comunidad');
+              }}
+              className={getMobileLinkClass('comunidad')}
+            >
+              Comunidad educativa
+            </a>
+
+            <a
+              href="#areas-cneb"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavClick('areas-cneb', '#areas-cneb');
+              }}
+              className={getMobileLinkClass('areas-cneb')}
+            >
+              Áreas del CNEB
+            </a>
+
+            <a
               href="#modulos"
               onClick={(e) => {
                 e.preventDefault();
@@ -305,7 +259,7 @@ export default function Navbar({
               }}
               className={getMobileLinkClass('portafolio')}
             >
-              Portafolio Docente (pronto)
+              Planificación CNEB
             </a>
 
             <a
@@ -379,11 +333,11 @@ export default function Navbar({
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
-                onOpenDemoModal();
+                navigate('/app#crear');
               }}
               className="w-full py-3 px-4 text-center text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl hover:from-orange-600 hover:to-amber-600 shadow-md shadow-orange-500/20 transition-colors cursor-pointer"
             >
-              Solicitar Demostración Institucional
+              Registrar mi colegio
             </button>
           </div>
         </div>

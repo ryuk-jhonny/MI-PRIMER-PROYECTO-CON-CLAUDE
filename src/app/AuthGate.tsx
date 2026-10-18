@@ -1,83 +1,39 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
-import type { Session } from '@supabase/supabase-js';
-import { ArrowLeft, Building2, KeyRound, Loader2, LogIn, Mail, ShieldCheck, UserPlus } from 'lucide-react';
-import { supabase, friendlyError } from '../lib/supabase';
-import { createCloudStore, DataStore, Role } from '../lib/store';
+import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Building2, CheckCircle2, GraduationCap, HeartHandshake, KeyRound, Loader2, LogIn, Mail, ShieldCheck, UserPlus } from 'lucide-react';
+import {
+  checkCode, createInstitution, joinWithCode, loadProfile, login, logout, resetPassword, signup, User, watchAuth,
+} from '../lib/accounts';
+import { friendlyError } from '../lib/firebase';
+import { ROLE_LABEL, UserProfile } from '../lib/store';
+import { AREAS, Level, LEVEL_LABEL, LEVELS } from '../lib/cneb';
 import { navigate } from '../lib/router';
-import { DEFAULT_DIRECTOR_PROFILE, DEFAULT_INSTITUTION_CONFIG, EducationalLevel, InstitutionConfig, PRESET_INTEGRAL } from '../types/institution';
 import Logo from './Logo';
 import FullLoader from './FullLoader';
 
-interface Membership {
-  institution_id: string;
-  role: Role;
-  full_name: string;
-  institutions: { name: string } | null;
-}
+export default function AuthGate({ children }: { children: (me: UserProfile, onLogout: () => void) => ReactNode }) {
+  const [user, setUser] = useState<User | null | undefined>(undefined);
+  const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
+  const [error, setError] = useState('');
 
-export default function AuthGate({ children }: { children: (store: DataStore, onLogout: () => void) => ReactNode }) {
-  const sb = supabase!;
-  const [session, setSession] = useState<Session | null>(null);
-  const [ready, setReady] = useState(false);
-  const [recovery, setRecovery] = useState(false);
-  const [memberships, setMemberships] = useState<Membership[] | null>(null);
-  const [activeInst, setActiveInst] = useState<string | null>(() => {
-    try { return localStorage.getItem('ryuk_active_institution'); } catch { return null; }
-  });
+  useEffect(() => watchAuth(setUser), []);
+
+  const refresh = useCallback(async (u: User) => {
+    setError('');
+    try { setProfile(await loadProfile(u.uid)); } catch (err) { setError(friendlyError(err)); setProfile(null); }
+  }, []);
 
   useEffect(() => {
-    sb.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
-    const { data } = sb.auth.onAuthStateChange((event, s) => {
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
-      setSession(s);
-    });
-    return () => data.subscription.unsubscribe();
-  }, [sb]);
+    if (user) { setProfile(undefined); refresh(user); } else setProfile(null);
+  }, [user, refresh]);
 
-  const loadMemberships = async () => {
-    const { data, error } = await sb.from('members').select('institution_id, role, full_name, institutions(name)').eq('user_id', session!.user.id);
-    if (error) { setMemberships([]); return; }
-    setMemberships(data as unknown as Membership[]);
-  };
+  const out = async () => { await logout(); setProfile(null); };
 
-  useEffect(() => {
-    if (session) loadMemberships(); else setMemberships(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user.id]);
-
-  const current = useMemo(() => {
-    if (!memberships?.length) return null;
-    return memberships.find((m) => m.institution_id === activeInst) || memberships[0];
-  }, [memberships, activeInst]);
-
-  const store = useMemo(
-    () => (current ? createCloudStore(current.institution_id, current.role, current.full_name || session?.user.email || '') : null),
-    [current, session?.user.email],
-  );
-
-  const logout = async () => {
-    await sb.auth.signOut();
-    try { localStorage.removeItem('ryuk_active_institution'); } catch { /* nada */ }
-    setActiveInst(null);
-  };
-
-  if (!ready || (session && memberships === null)) return <FullLoader />;
-  if (recovery && session) return <NewPasswordScreen onDone={() => setRecovery(false)} />;
-  if (!session) return <LoginScreen />;
-  if (!current || !store) {
-    return (
-      <SetupScreen
-        email={session.user.email || ''}
-        onLogout={logout}
-        onReady={async (id) => {
-          try { localStorage.setItem('ryuk_active_institution', id); } catch { /* nada */ }
-          setActiveInst(id);
-          await loadMemberships();
-        }}
-      />
-    );
+  if (user === undefined || (user && profile === undefined)) return <FullLoader />;
+  if (!user) return <LoginScreen />;
+  if (!profile) {
+    return <SetupScreen email={user.email || ''} loadError={error} onLogout={out} onReady={(p) => setProfile(p)} />;
   }
-  return <>{children(store, logout)}</>;
+  return <>{children(profile, out)}</>;
 }
 
 // ---------------------------------------------------------------------
@@ -94,7 +50,7 @@ function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
         </button>
       </header>
       <main className="flex-1 flex items-start sm:items-center justify-center px-4 py-6 sm:py-10">
-        <div className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} bg-white text-slate-900 rounded-3xl shadow-2xl p-6 sm:p-8`}>{children}</div>
+        <div className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} bg-white text-slate-900 rounded-3xl shadow-2xl p-6 sm:p-8 animate-[fadeUp_.35s_ease-out]`}>{children}</div>
       </main>
       <footer className="text-center text-xs text-slate-400 pb-6 px-4">
         Al usar Ryuk aceptas los{' '}
@@ -108,6 +64,7 @@ function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
 const inputCls = 'w-full h-12 px-4 rounded-xl border border-slate-300 bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-600/20 text-base';
 const labelCls = 'block text-sm font-semibold text-slate-700 mb-1.5';
 const primaryBtn = 'w-full h-12 rounded-xl bg-orange-700 hover:bg-orange-800 active:scale-[0.99] text-white font-bold inline-flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer transition';
+const chip = (on: boolean) => `h-11 px-4 rounded-xl border-2 font-semibold text-sm cursor-pointer transition ${on ? 'border-orange-700 bg-orange-50 text-orange-800' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`;
 
 function Alert({ kind, children }: { kind: 'error' | 'ok'; children: ReactNode }) {
   return (
@@ -118,8 +75,7 @@ function Alert({ kind, children }: { kind: 'error' | 'ok'; children: ReactNode }
 }
 
 function LoginScreen() {
-  const sb = supabase!;
-  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(() => (window.location.hash === '#crear' ? 'signup' : 'login'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -130,19 +86,9 @@ function LoginScreen() {
     e.preventDefault();
     setError(''); setInfo(''); setBusy(true);
     try {
-      if (mode === 'login') {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      } else if (mode === 'signup') {
-        if (password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres.');
-        const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/app` } });
-        if (error) throw error;
-        if (!data.session) setInfo('Te enviamos un correo para confirmar tu cuenta. Ábrelo y vuelve aquí para iniciar sesión.');
-      } else {
-        const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/app` });
-        if (error) throw error;
-        setInfo('Si el correo existe, te llegará un enlace para crear una nueva contraseña.');
-      }
+      if (mode === 'login') await login(email, password);
+      else if (mode === 'signup') await signup(email, password);
+      else { await resetPassword(email); setInfo('Si el correo tiene una cuenta, te llegará un enlace para crear una nueva contraseña.'); }
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -158,7 +104,7 @@ function LoginScreen() {
             {mode === 'login' ? 'Ingresa a tu colegio' : mode === 'signup' ? 'Crea tu cuenta' : 'Recupera tu contraseña'}
           </h1>
           <p className="text-sm text-slate-600">
-            {mode === 'login' ? 'Dirección, docentes y personal de puerta.' : mode === 'signup' ? 'Luego registras tu colegio o te unes con el código que te dio la dirección.' : 'Te enviaremos un enlace a tu correo.'}
+            {mode === 'login' ? 'Dirección, docentes, estudiantes y familias.' : mode === 'signup' ? 'Después registras tu colegio o te unes con el código que te dio la dirección.' : 'Te enviaremos un enlace a tu correo.'}
           </p>
         </div>
 
@@ -176,7 +122,7 @@ function LoginScreen() {
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label htmlFor="email" className={labelCls}>Correo</label>
-            <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="tucorreo@colegio.edu.pe" />
+            <input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="tucorreo@ejemplo.com" />
           </div>
           {mode !== 'forgot' && (
             <div>
@@ -203,103 +149,64 @@ function LoginScreen() {
 
         <div className="pt-4 border-t border-slate-200 text-sm text-slate-600 flex items-start gap-2">
           <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-          <span>Las familias no necesitan cuenta: escanean el QR del carnet con su celular.</span>
+          <span>Las familias también pueden ver el avance sin cuenta: basta con escanear el QR del carnet.</span>
         </div>
       </div>
     </Shell>
   );
 }
 
-function NewPasswordScreen({ onDone }: { onDone: () => void }) {
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setError('');
-    const { error } = await supabase!.auth.updateUser({ password });
-    setBusy(false);
-    if (error) setError(friendlyError(error)); else onDone();
-  };
-  return (
-    <Shell>
-      <form onSubmit={submit} className="space-y-4">
-        <h1 className="text-2xl font-bold">Crea una nueva contraseña</h1>
-        <div>
-          <label htmlFor="np" className={labelCls}>Nueva contraseña</label>
-          <input id="np" type="password" minLength={8} required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
-        </div>
-        {error && <Alert kind="error">{error}</Alert>}
-        <button type="submit" disabled={busy} className={primaryBtn}><KeyRound className="w-5 h-5" /> Guardar contraseña</button>
-      </form>
-    </Shell>
-  );
-}
-
-const LEVELS: { id: EducationalLevel; label: string }[] = [
-  { id: 'inicial', label: 'Inicial' },
-  { id: 'primaria', label: 'Primaria' },
-  { id: 'secundaria', label: 'Secundaria' },
-];
-
-function SetupScreen({ email, onReady, onLogout }: { email: string; onReady: (institutionId: string) => Promise<void>; onLogout: () => void }) {
-  const sb = supabase!;
+function SetupScreen({ email, loadError, onReady, onLogout }: { email: string; loadError: string; onReady: (p: UserProfile) => void; onLogout: () => void }) {
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(loadError);
   const [fullName, setFullName] = useState('');
   const [schoolName, setSchoolName] = useState('');
   const [shortName, setShortName] = useState('');
-  const [levels, setLevels] = useState<EducationalLevel[]>(['primaria', 'secundaria']);
+  const [levels, setLevels] = useState<Level[]>(['primaria', 'secundaria']);
   const [periodType, setPeriodType] = useState<'bimestral' | 'trimestral'>('bimestral');
   const [code, setCode] = useState('');
+  const [checked, setChecked] = useState<Awaited<ReturnType<typeof checkCode>> | null>(null);
+  const [areas, setAreas] = useState<string[]>([]);
 
-  const create = async (e: FormEvent) => {
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setError('');
+    try { await fn(); } catch (err) { setError(friendlyError(err)); }
+    setBusy(false);
+  };
+
+  const create = (e: FormEvent) => {
     e.preventDefault();
     if (!levels.length) { setError('Elige al menos un nivel.'); return; }
-    setBusy(true); setError('');
-    const config: InstitutionConfig = {
-      ...DEFAULT_INSTITUTION_CONFIG,
-      institutionName: schoolName.trim(),
-      shortName: shortName.trim() || schoolName.trim(),
-      modularCodePrimaria: '', modularCodeSecundaria: '', modularCodeInicial: '', localCode: '',
-      dre: '', ugel: '', directorName: fullName.trim(), directorDni: '', motto: '',
-      academicYear: String(new Date().getFullYear()),
-      activeLevels: levels,
-      periodType,
-      activePeriod: periodType === 'bimestral' ? 'Bimestre I' : 'Trimestre I',
-      gradeConfigs: PRESET_INTEGRAL.gradeConfigs.map((g) => ({ ...g, enabled: levels.includes(g.level) })),
-      timeZone: 'America/Lima',
-    };
-    const profile = { ...DEFAULT_DIRECTOR_PROFILE, name: fullName.trim(), email, dni: '', phone: '', specialty: '', signatureTitle: 'Director(a)', role: 'Director(a)' };
-    const { data, error } = await sb.rpc('create_institution', { p_name: config.institutionName, p_config: config, p_profile: profile, p_full_name: fullName.trim() });
-    if (error) { setBusy(false); setError(friendlyError(error)); return; }
-    await onReady(data as string);
+    run(async () => onReady(await createInstitution({ fullName, schoolName, shortName, levels, periodType })));
   };
 
-  const join = async (e: FormEvent) => {
+  const verify = (e: FormEvent) => { e.preventDefault(); run(async () => setChecked(await checkCode(code))); };
+
+  const join = (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true); setError('');
-    const { data, error } = await sb.rpc('join_institution', { p_code: code, p_full_name: fullName.trim() });
-    if (error) { setBusy(false); setError(friendlyError(error)); return; }
-    await onReady(data as string);
+    if (checked?.role === 'docente' && (!areas.length || !levels.length)) { setError('Elige al menos un área y un nivel.'); return; }
+    run(async () => onReady(await joinWithCode(code, { fullName, areas, levels })));
   };
+
+  const areaOptions = AREAS.filter((a) => levels.some((l) => a.competencias[l]?.length));
 
   return (
-    <Shell wide={mode === 'create'}>
+    <Shell wide={mode !== 'choose'}>
       {mode === 'choose' && (
         <div className="space-y-5">
           <div>
             <h1 className="text-2xl font-bold">¡Bienvenido(a)!</h1>
             <p className="text-sm text-slate-600 mt-1">Ingresaste como <strong>{email}</strong>. ¿Qué quieres hacer?</p>
           </div>
+          {error && <Alert kind="error">{error}</Alert>}
           <button type="button" onClick={() => setMode('create')} className="w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-orange-600 transition flex gap-4 cursor-pointer">
             <Building2 className="w-7 h-7 text-orange-700 shrink-0" />
             <span><strong className="block">Registrar mi colegio</strong><span className="text-sm text-slate-600">Soy director(a) o promotor(a) y quiero empezar.</span></span>
           </button>
           <button type="button" onClick={() => setMode('join')} className="w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-orange-600 transition flex gap-4 cursor-pointer">
             <KeyRound className="w-7 h-7 text-orange-700 shrink-0" />
-            <span><strong className="block">Unirme con un código</strong><span className="text-sm text-slate-600">Soy docente o personal de puerta y la dirección me dio un código.</span></span>
+            <span><strong className="block">Unirme con un código</strong><span className="text-sm text-slate-600">Soy docente, personal de puerta, estudiante o familia y el colegio me dio un código.</span></span>
           </button>
           <button type="button" onClick={onLogout} className="w-full text-sm text-slate-500 hover:text-slate-800 min-h-11 cursor-pointer">Cerrar sesión</button>
         </div>
@@ -319,20 +226,15 @@ function SetupScreen({ email, onReady, onLogout }: { email: string; onReady: (in
             </div>
             <div>
               <label htmlFor="fn" className={labelCls}>Tu nombre completo</label>
-              <input id="fn" required value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} autoComplete="name" />
+              <input id="fn" required minLength={2} value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} autoComplete="name" />
             </div>
           </div>
           <fieldset>
             <legend className={labelCls}>Niveles que atiende</legend>
             <div className="flex flex-wrap gap-2">
               {LEVELS.map((l) => {
-                const on = levels.includes(l.id);
-                return (
-                  <button key={l.id} type="button" aria-pressed={on} onClick={() => setLevels(on ? levels.filter((x) => x !== l.id) : [...levels, l.id])}
-                    className={`h-11 px-4 rounded-xl border-2 font-semibold text-sm cursor-pointer transition ${on ? 'border-orange-700 bg-orange-50 text-orange-800' : 'border-slate-200 text-slate-600'}`}>
-                    {l.label}
-                  </button>
-                );
+                const on = levels.includes(l);
+                return <button key={l} type="button" aria-pressed={on} onClick={() => setLevels(on ? levels.filter((x) => x !== l) : [...levels, l])} className={chip(on)}>{LEVEL_LABEL[l]}</button>;
               })}
             </div>
           </fieldset>
@@ -340,8 +242,7 @@ function SetupScreen({ email, onReady, onLogout }: { email: string; onReady: (in
             <legend className={labelCls}>Periodos de evaluación</legend>
             <div className="flex gap-2">
               {(['bimestral', 'trimestral'] as const).map((p) => (
-                <button key={p} type="button" aria-pressed={periodType === p} onClick={() => setPeriodType(p)}
-                  className={`h-11 px-4 rounded-xl border-2 font-semibold text-sm cursor-pointer transition ${periodType === p ? 'border-orange-700 bg-orange-50 text-orange-800' : 'border-slate-200 text-slate-600'}`}>
+                <button key={p} type="button" aria-pressed={periodType === p} onClick={() => setPeriodType(p)} className={chip(periodType === p)}>
                   {p === 'bimestral' ? '4 bimestres' : '3 trimestres'}
                 </button>
               ))}
@@ -352,24 +253,77 @@ function SetupScreen({ email, onReady, onLogout }: { email: string; onReady: (in
             <button type="button" onClick={() => setMode('choose')} className="h-12 px-5 rounded-xl border border-slate-300 font-semibold text-slate-700 cursor-pointer">Atrás</button>
             <button type="submit" disabled={busy} className={primaryBtn}>{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Building2 className="w-5 h-5" />} Crear mi colegio</button>
           </div>
-          <p className="text-xs text-slate-500">Luego podrás completar UGEL, códigos modulares, aulas y horarios en Configuración.</p>
+          <p className="text-xs text-slate-500">Luego completas UGEL, códigos modulares, aulas y horarios en Configuración.</p>
         </form>
       )}
 
-      {mode === 'join' && (
-        <form onSubmit={join} className="space-y-4">
+      {mode === 'join' && !checked && (
+        <form onSubmit={verify} className="space-y-4">
           <h1 className="text-2xl font-bold">Únete a tu colegio</h1>
+          <p className="text-sm text-slate-600">La dirección entrega un código a cada docente y al personal de puerta. Estudiantes y familias encuentran el suyo en la ficha que entrega el colegio.</p>
           <div>
-            <label htmlFor="jn" className={labelCls}>Tu nombre completo</label>
-            <input id="jn" required value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} autoComplete="name" />
-          </div>
-          <div>
-            <label htmlFor="jc" className={labelCls}>Código de invitación</label>
-            <input id="jc" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className={`${inputCls} font-mono tracking-widest uppercase`} placeholder="8 caracteres" maxLength={8} />
+            <label htmlFor="jc" className={labelCls}>Código</label>
+            <input id="jc" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className={`${inputCls} font-mono tracking-widest uppercase`} placeholder="Ej.: K7MQ2PXA" maxLength={14} autoComplete="off" />
           </div>
           {error && <Alert kind="error">{error}</Alert>}
           <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
             <button type="button" onClick={() => setMode('choose')} className="h-12 px-5 rounded-xl border border-slate-300 font-semibold text-slate-700 cursor-pointer">Atrás</button>
+            <button type="submit" disabled={busy} className={primaryBtn}>{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <KeyRound className="w-5 h-5" />} Validar código</button>
+          </div>
+        </form>
+      )}
+
+      {mode === 'join' && checked && (
+        <form onSubmit={join} className="space-y-5">
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+            <CheckCircle2 className="w-6 h-6 text-emerald-700 shrink-0" />
+            <div className="text-sm text-emerald-900">
+              <p className="font-bold">Código válido</p>
+              <p>Te unirás como <strong>{ROLE_LABEL[checked.role]}</strong>.</p>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="jn" className={labelCls}>{checked.role === 'familia' ? 'Nombre del padre, madre o apoderado(a)' : 'Tu nombre completo'}</label>
+            <input id="jn" required minLength={2} value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} autoComplete="name" />
+          </div>
+
+          {checked.role === 'docente' && (
+            <>
+              <fieldset>
+                <legend className={labelCls}>¿En qué nivel enseñas?</legend>
+                <div className="flex flex-wrap gap-2">
+                  {LEVELS.map((l) => {
+                    const on = levels.includes(l);
+                    return <button key={l} type="button" aria-pressed={on} onClick={() => setLevels(on ? levels.filter((x) => x !== l) : [...levels, l])} className={chip(on)}>{LEVEL_LABEL[l]}</button>;
+                  })}
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend className={labelCls}>¿Qué áreas del CNEB enseñas?</legend>
+                {levels.includes('primaria') && (
+                  <button type="button" onClick={() => setAreas([...new Set([...areas, ...AREAS.filter((a) => a.competencias.primaria).map((a) => a.name)])])}
+                    className="mb-3 text-sm font-semibold text-orange-700 hover:underline cursor-pointer inline-flex items-center gap-1.5 min-h-11">
+                    <GraduationCap className="w-4 h-4" /> Soy docente de aula de primaria (todas las áreas)
+                  </button>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {areaOptions.map((a) => {
+                    const on = areas.includes(a.name);
+                    return <button key={a.name} type="button" aria-pressed={on} onClick={() => setAreas(on ? areas.filter((x) => x !== a.name) : [...areas, a.name])} className={chip(on)}>{a.name}</button>;
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">Tu panel se arma con las competencias, capacidades y herramientas de tus áreas. Puedes cambiarlo después.</p>
+              </fieldset>
+            </>
+          )}
+
+          {(checked.role === 'estudiante' || checked.role === 'familia') && (
+            <p className="text-sm text-slate-600 flex items-start gap-2"><HeartHandshake className="w-5 h-5 text-orange-700 shrink-0" /> Verás las notas por competencia, la asistencia, las actividades y los comunicados del colegio.</p>
+          )}
+
+          {error && <Alert kind="error">{error}</Alert>}
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-2">
+            <button type="button" onClick={() => { setChecked(null); setError(''); }} className="h-12 px-5 rounded-xl border border-slate-300 font-semibold text-slate-700 cursor-pointer">Atrás</button>
             <button type="submit" disabled={busy} className={primaryBtn}>{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <KeyRound className="w-5 h-5" />} Unirme</button>
           </div>
         </form>

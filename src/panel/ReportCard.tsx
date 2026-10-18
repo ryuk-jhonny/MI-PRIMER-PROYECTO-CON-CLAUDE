@@ -3,7 +3,8 @@ import QRCode from 'qrcode';
 import { Printer, X } from 'lucide-react';
 import { Student } from '../types/education';
 import { InstitutionConfig, DirectorProfile } from '../types/institution';
-import { CNEB_AREAS, findGrade, levelOf, overallLiteral, periodCount, periodLabel, statusOf, unitsOf } from '../lib/school';
+import { CNEB_AREAS, compUnitsOf, findGrade, levelOf, overallLiteral, periodCount, periodLabel, statusOf, unitsOf } from '../lib/school';
+import { competenciasOf } from '../lib/cneb';
 
 /** Libreta de notas imprimible (o guardable como PDF desde el navegador). */
 export default function ReportCard({ student, config, profile, onClose }: { student: Student; config: InstitutionConfig; profile: DirectorProfile; onClose: () => void }) {
@@ -11,7 +12,7 @@ export default function ReportCard({ student, config, profile, onClose }: { stud
   const n = periodCount(config);
   const level = levelOf(student);
   const areas = [...new Set([...CNEB_AREAS[level], ...(student.grades || []).map((g) => g.courseName)])];
-  const modular = level === 'inicial' ? config.modularCodeInicial : level === 'primaria' ? config.modularCodePrimaria : config.modularCodeSecundaria;
+  const modular = level === 'primaria' ? config.modularCodePrimaria : config.modularCodeSecundaria;
   const overall = overallLiteral(student);
 
   useEffect(() => {
@@ -62,16 +63,24 @@ export default function ReportCard({ student, config, profile, onClose }: { stud
             <tbody>
               {areas.map((a) => {
                 const g = findGrade(student, a);
-                return (
-                  <tr key={a}>
+                const comps = competenciasOf(a, level);
+                return [
+                  <tr key={a} className="bg-slate-50/60">
                     <td className="p-2 border border-slate-300">
                       <span className="font-semibold">{a}</span>
                       {g?.recentFeedback && <span className="block text-[11px] text-slate-600 mt-0.5">{g.recentFeedback}</span>}
                     </td>
                     {unitsOf(g, n).map((v, i) => <td key={i} className="p-2 border border-slate-300 text-center font-bold">{v || '—'}</td>)}
-                    <td className="p-2 border border-slate-300 text-center font-bold bg-slate-50">{g?.average || '—'}</td>
-                  </tr>
-                );
+                    <td className="p-2 border border-slate-300 text-center font-bold bg-slate-100">{g?.average || '—'}</td>
+                  </tr>,
+                  ...comps.filter((c) => compUnitsOf(g, c.id, n).some(Boolean)).map((c) => (
+                    <tr key={`${a}-${c.id}`}>
+                      <td className="py-1.5 px-2 pl-5 border border-slate-300 text-[11px] text-slate-600">{c.name}</td>
+                      {compUnitsOf(g, c.id, n).map((v, i) => <td key={i} className="py-1.5 px-2 border border-slate-300 text-center text-[11px]">{v || '—'}</td>)}
+                      <td className="py-1.5 px-2 border border-slate-300" />
+                    </tr>
+                  )),
+                ];
               })}
             </tbody>
           </table>

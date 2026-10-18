@@ -6,7 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.emulador
 .claude/
 
 .vercel
 .env*.local
+test-results/
+playwright-report/
+.firebase/

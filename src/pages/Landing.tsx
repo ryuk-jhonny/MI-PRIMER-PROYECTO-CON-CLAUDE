@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import Hero from '../components/Hero';
 import StatsNavyBanner from '../components/StatsNavyBanner';
 import ProgramsGrid from '../components/ProgramsGrid';
+import CommunitySection from '../components/CommunitySection';
 import CampusBanner from '../components/CampusBanner';
 import InteractiveSimulator from '../components/InteractiveSimulator';
 import LifeAndActivities from '../components/LifeAndActivities';
@@ -60,13 +61,14 @@ export default function Landing() {
         <Hero onOpenDemoModal={() => openDemoModal()} onScrollToSimulator={() => scrollToSimulator()} onNavigateToModule={navigateToModule} onOpenAccessModal={openAccess} />
         <StatsNavyBanner />
         <ProgramsGrid onScrollToSimulator={() => scrollToSimulator()} onOpenDemoModal={() => openDemoModal()} onSelectModule={navigateToModule} />
+        <CommunitySection />
         <CampusBanner onScrollToSimulator={() => scrollToSimulator()} />
         <InteractiveSimulator
           activeTab={simulatorTab}
           studentMobileView={simulatorView}
           onTabChange={setSimulatorTab}
           onStudentViewChange={setSimulatorView}
-          onOpenDirectorConsole={() => navigate('/demo')}
+          onOpenDirectorConsole={() => navigate('/app')}
         />
         <LifeAndActivities onScrollToSimulator={scrollToSimulator} onOpenDemoModal={() => openDemoModal()} />
         <HowQrWorks />

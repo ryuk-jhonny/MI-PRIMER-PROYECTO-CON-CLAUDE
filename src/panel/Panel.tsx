@@ -1,74 +1,96 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BookOpenCheck, CheckCircle2, ExternalLink, GraduationCap, Home, LogOut, Megaphone, Menu, ScanLine, Settings, TriangleAlert, Users, X,
+  Activity, BookOpenCheck, CheckCircle2, ClipboardList, Compass, GraduationCap, Home, LogOut, Megaphone, Menu, NotebookPen, ScanLine, Settings, TriangleAlert, Users, X,
 } from 'lucide-react';
-import { Student, Teacher } from '../types/education';
+import { Student } from '../types/education';
 import { DirectorProfile, InstitutionConfig } from '../types/institution';
-import { AttendanceRecord, AttendanceStatus, DataStore, normalizeStudents, normalizeTeachers, ScanResult, todayIn, tokenFromQr, WorkspaceData, resetDemoData } from '../lib/store';
-import { friendlyError } from '../lib/supabase';
-import { navigate } from '../lib/router';
+import {
+  AttendanceRecord, AttendanceStatus, bumpCounters, createStaffStore, ROLE_LABEL, ScanResult, StaffRole, StaffStore, todayIn, tokenFromQr, UserProfile,
+} from '../lib/store';
+import { friendlyError } from '../lib/firebase';
+import { ALL_AREAS, areaInfo } from '../lib/cneb';
 import FullLoader from '../app/FullLoader';
 import Logo from '../app/Logo';
 import HomeTab from './HomeTab';
 import AttendanceTab from './AttendanceTab';
 import GradesTab from './GradesTab';
-import TeachersTab from './TeachersTab';
+import TeamTab from './TeamTab';
 import AnnouncementsTab from './AnnouncementsTab';
 import StudentsTab from './StudentsTab';
 import SettingsTab from './SettingsTab';
+import AreaTab from './AreaTab';
+import PlanningTab from './PlanningTab';
+import TasksTab from './TasksTab';
+import FitnessTab from './FitnessTab';
 
-export type Tab = 'inicio' | 'asistencia' | 'estudiantes' | 'notas' | 'docentes' | 'comunicados' | 'configuracion';
+export type Tab = 'inicio' | 'asistencia' | 'estudiantes' | 'notas' | 'area' | 'planificacion' | 'actividades' | 'fisica' | 'equipo' | 'comunicados' | 'configuracion';
 
-const NAV: { id: Tab; label: string; icon: typeof Home; roles: DataStore['role'][] }[] = [
+interface NavItem { id: Tab; label: string; icon: typeof Home; roles: StaffRole[]; needsFisica?: boolean }
+
+const NAV: NavItem[] = [
   { id: 'inicio', label: 'Inicio', icon: Home, roles: ['director', 'docente', 'auxiliar'] },
+  { id: 'area', label: 'Mi área CNEB', icon: Compass, roles: ['docente'] },
   { id: 'asistencia', label: 'Asistencia QR', icon: ScanLine, roles: ['director', 'docente', 'auxiliar'] },
   { id: 'estudiantes', label: 'Estudiantes', icon: Users, roles: ['director', 'docente', 'auxiliar'] },
   { id: 'notas', label: 'Notas y libretas', icon: BookOpenCheck, roles: ['director', 'docente'] },
-  { id: 'docentes', label: 'Docentes', icon: GraduationCap, roles: ['director'] },
+  { id: 'planificacion', label: 'Planificación', icon: NotebookPen, roles: ['director', 'docente'] },
+  { id: 'actividades', label: 'Actividades', icon: ClipboardList, roles: ['director', 'docente'] },
+  { id: 'fisica', label: 'Evaluación física', icon: Activity, roles: ['director', 'docente'], needsFisica: true },
+  { id: 'equipo', label: 'Equipo docente', icon: GraduationCap, roles: ['director'] },
   { id: 'comunicados', label: 'Comunicados', icon: Megaphone, roles: ['director', 'docente'] },
   { id: 'configuracion', label: 'Configuración', icon: Settings, roles: ['director'] },
 ];
 
-const ROLE_LABEL = { director: 'Dirección', docente: 'Docente', auxiliar: 'Personal de puerta' };
-
 export interface Toast { id: number; kind: 'ok' | 'error'; text: string }
 
 export interface PanelCtx {
-  store: DataStore;
+  store: StaffStore;
+  me: UserProfile;
   config: InstitutionConfig;
   profile: DirectorProfile;
   students: Student[];
-  teachers: Teacher[];
-  codes?: { teacher: string; staff: string };
   today: string;
   todayRecords: AttendanceRecord[];
+  /** Áreas que esta persona puede calificar y planificar. */
+  myAreas: string[];
+  isDirector: boolean;
   toast: (text: string, kind?: Toast['kind']) => void;
   go: (t: Tab) => void;
-  updateStudents: (next: Student[], okMsg?: string) => void;
-  updateTeachers: (next: Teacher[], okMsg?: string) => void;
-  updateConfig: (cfg: InstitutionConfig) => void;
-  updateProfile: (p: DirectorProfile) => void;
+  addStudents: (list: Student[], okMsg?: string) => Promise<void>;
+  saveStudents: (list: Student[], okMsg?: string) => Promise<void>;
+  removeStudent: (s: Student) => Promise<void>;
+  replaceQr: (s: Student) => Promise<void>;
+  updateConfig: (cfg: InstitutionConfig) => Promise<void>;
+  updateProfile: (p: DirectorProfile) => Promise<void>;
+  updateMe: (patch: Partial<UserProfile>) => Promise<void>;
   scan: (raw: string) => Promise<ScanResult>;
   registerStudent: (s: Student) => Promise<void>;
   setStatus: (rec: AttendanceRecord, status: AttendanceStatus) => Promise<void>;
   closeDay: () => Promise<void>;
-  refreshToday: () => Promise<void>;
-  setCodes: (c: { teacher: string; staff: string }) => void;
 }
 
-export default function Panel({ store, onLogout }: { store: DataStore; onLogout: () => void }) {
-  const [data, setData] = useState<WorkspaceData | null>(null);
+export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () => void }) {
+  const store = useMemo(() => createStaffStore(me), [me]);
+  const [config, setConfig] = useState<InstitutionConfig | null>(null);
+  const [profile, setProfile] = useState<DirectorProfile | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [meState, setMeState] = useState<UserProfile>(me);
   const [loadError, setLoadError] = useState('');
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
-  const allowed = NAV.filter((n) => n.roles.includes(store.role));
+
+  const role = me.role as StaffRole;
+  const isDirector = role === 'director';
+  const myAreas = isDirector ? ALL_AREAS : meState.areas || [];
+  const hasFisica = isDirector || myAreas.some((a) => areaInfo(a)?.tool === 'fisica');
+  const allowed = NAV.filter((n) => n.roles.includes(role) && (!n.needsFisica || hasFisica));
   const [tab, setTab] = useState<Tab>(() => {
     const h = window.location.hash.replace('#', '') as Tab;
-    return allowed.some((n) => n.id === h) ? h : store.role === 'auxiliar' ? 'asistencia' : 'inicio';
+    return allowed.some((n) => n.id === h) ? h : role === 'auxiliar' ? 'asistencia' : 'inicio';
   });
 
-  const tz = data?.config.timeZone || 'America/Lima';
+  const tz = config?.timeZone || 'America/Lima';
   const today = todayIn(tz);
 
   const toast = useCallback((text: string, kind: Toast['kind'] = 'ok') => {
@@ -81,22 +103,19 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
     setLoadError('');
     try {
       const d = await store.load();
-      setData(d);
+      setConfig(d.config);
+      setProfile(d.profile);
+      setStudents(d.students);
     } catch (err) {
       setLoadError(friendlyError(err));
     }
   }, [store]);
 
-  const refreshToday = useCallback(async () => {
-    try { setRecords(await store.listAttendance(todayIn(tz))); } catch { /* se reintenta en el próximo aviso */ }
-  }, [store, tz]);
-
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (!data) return;
-    refreshToday();
-    return store.subscribeAttendance(refreshToday);
-  }, [data !== null, refreshToday, store]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!config) return;
+    return store.watchAttendance(today, setRecords, (e) => toast(friendlyError(e), 'error'));
+  }, [config !== null, store, today]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = (t: Tab) => {
     setTab(t);
@@ -110,30 +129,15 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
     load();
   };
 
-  const bumpCounters = (studentId: string, status: AttendanceStatus, delta: 1 | -1) => {
-    setData((d) => d && {
-      ...d,
-      students: d.students.map((s) => {
-        if (s.id !== studentId) return s;
-        const present = s.presentDays + (status === 'Puntual' ? delta : 0);
-        const late = s.lateDays + (status === 'Tardanza' ? delta : 0);
-        const absent = s.absentDays + (status === 'Inasistencia' ? delta : 0);
-        const total = s.totalDays + delta;
-        const attended = total - absent;
-        return { ...s, presentDays: present, lateDays: late, absentDays: absent, totalDays: total, attendanceRate: total > 0 ? Math.round((attended / total) * 1000) / 10 : 0 };
-      }),
-    });
-  };
-
   const ctx: PanelCtx | null = useMemo(() => {
-    if (!data) return null;
+    if (!config || !profile) return null;
+    const patchStudent = (id: string, fn: (s: Student) => Student) => setStudents((list) => list.map((s) => (s.id === id ? fn(s) : s)));
     const scan = async (raw: string): Promise<ScanResult> => {
       const token = tokenFromQr(raw);
       if (!token) return { ok: false, error: 'Este QR no es un carnet de Ryuk.' };
       try {
-        const res = await store.registerScan(token);
-        if (res.ok && !res.duplicate && res.student && res.status) bumpCounters(res.student.id, res.status, 1);
-        refreshToday();
+        const res = await store.registerScan(token, students);
+        if (res.ok && !res.duplicate && res.student && res.status) patchStudent(res.student.id, (s) => bumpCounters(s, res.status!, 1));
         return res;
       } catch (err) {
         return { ok: false, error: friendlyError(err) };
@@ -141,32 +145,45 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
     };
     return {
       store,
-      config: data.config,
-      profile: data.profile,
-      students: data.students,
-      teachers: data.teachers,
-      codes: data.codes,
+      me: meState,
+      config,
+      profile,
+      students,
       today,
       todayRecords: records,
+      myAreas,
+      isDirector,
       toast,
       go,
-      updateStudents(next, okMsg) {
-        const norm = normalizeStudents(next);
-        setData((d) => d && { ...d, students: norm });
-        store.saveStudents(norm).then(() => okMsg && toast(okMsg)).catch(fail);
+      async addStudents(list, okMsg) {
+        try {
+          const saved = await store.addStudents(list);
+          setStudents((cur) => [...saved, ...cur].sort((a, b) => a.fullName.localeCompare(b.fullName)));
+          if (okMsg) toast(okMsg);
+        } catch (err) { fail(err); }
       },
-      updateTeachers(next, okMsg) {
-        const norm = normalizeTeachers(next);
-        setData((d) => d && { ...d, teachers: norm });
-        store.saveTeachers(norm).then(() => okMsg && toast(okMsg)).catch(fail);
+      async saveStudents(list, okMsg) {
+        const ids = new Map(list.map((s) => [s.id, s]));
+        setStudents((cur) => cur.map((s) => ids.get(s.id) || s));
+        try { await store.updateStudents(list); if (okMsg) toast(okMsg); } catch (err) { fail(err); }
       },
-      updateConfig(cfg) {
-        setData((d) => d && { ...d, config: cfg });
-        store.saveConfig(cfg).catch(fail);
+      async removeStudent(s) {
+        setStudents((cur) => cur.filter((x) => x.id !== s.id));
+        try { await store.deleteStudent(s); toast('Estudiante retirado.'); } catch (err) { fail(err); }
       },
-      updateProfile(p) {
-        setData((d) => d && { ...d, profile: p });
-        store.saveProfile(p).then(() => toast('Perfil actualizado.')).catch(fail);
+      async replaceQr(s) {
+        try { const next = await store.replaceQr(s); patchStudent(s.id, () => next); toast('QR nuevo listo. El carnet anterior ya no funciona.'); } catch (err) { fail(err); }
+      },
+      async updateConfig(cfg) {
+        setConfig(cfg);
+        try { await store.saveConfig(cfg); toast('Configuración guardada.'); } catch (err) { fail(err); }
+      },
+      async updateProfile(p) {
+        setProfile(p);
+        try { await store.saveProfile(p); toast('Perfil actualizado.'); } catch (err) { fail(err); }
+      },
+      async updateMe(patch) {
+        try { await store.updateMe(patch); setMeState((m) => ({ ...m, ...patch })); toast('Tus datos se guardaron.'); } catch (err) { toast(friendlyError(err), 'error'); }
       },
       scan,
       async registerStudent(s) {
@@ -178,25 +195,21 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
       },
       async setStatus(rec, status) {
         try {
-          await store.setAttendanceStatus(rec.id, status);
-          bumpCounters(rec.studentId, rec.status, -1);
-          bumpCounters(rec.studentId, status, 1);
-          await refreshToday();
+          await store.setAttendanceStatus(rec, status, students.find((s) => s.id === rec.studentId));
+          patchStudent(rec.studentId, (s) => bumpCounters(bumpCounters(s, rec.status, -1), status, 1));
           toast(`Estado cambiado a ${status}.`);
         } catch (err) { toast(friendlyError(err), 'error'); }
       },
       async closeDay() {
         try {
-          const n = await store.closeDay(today);
-          await refreshToday();
-          await load();
+          const n = await store.closeDay(today, students, records);
+          const seen = new Set(records.map((r) => r.studentId));
+          setStudents((cur) => cur.map((s) => (seen.has(s.id) ? s : bumpCounters(s, 'Inasistencia', 1))));
           toast(n ? `Se marcaron ${n} inasistencias del día.` : 'Todos los alumnos ya tienen registro hoy.');
         } catch (err) { toast(friendlyError(err), 'error'); }
       },
-      refreshToday,
-      setCodes(c) { setData((d) => d && { ...d, codes: c }); },
     };
-  }, [data, records, store, today, toast, refreshToday, load]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [config, profile, students, records, store, today, toast, meState, myAreas, isDirector]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loadError) {
     return (
@@ -216,7 +229,8 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
   if (!ctx) return <FullLoader label="Cargando tu colegio…" />;
 
   const current = allowed.find((n) => n.id === tab) || allowed[0];
-  const bottom = allowed.filter((n) => ['inicio', 'asistencia', 'estudiantes', 'notas'].includes(n.id)).slice(0, 4);
+  const quick: Tab[] = role === 'docente' ? ['inicio', 'area', 'notas', 'asistencia'] : ['inicio', 'asistencia', 'estudiantes', 'notas'];
+  const bottom = allowed.filter((n) => quick.includes(n.id)).slice(0, 4);
 
   const NavList = () => (
     <nav aria-label="Secciones del panel" className="space-y-1">
@@ -235,23 +249,17 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
   const Account = () => (
     <div className="space-y-2">
       <div className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800">
-        <p className="text-sm font-semibold text-white truncate">{store.mode === 'demo' ? ctx.profile.name : store.userName}</p>
-        <p className="text-xs text-slate-400">{ROLE_LABEL[store.role]}</p>
+        <p className="text-sm font-semibold text-white truncate">{meState.fullName}</p>
+        <p className="text-xs text-slate-400 truncate">{ROLE_LABEL[role]}{role === 'docente' && myAreas.length ? ` · ${myAreas.length === 1 ? myAreas[0] : `${myAreas.length} áreas`}` : ''}</p>
       </div>
-      {store.mode === 'demo' ? (
-        <button type="button" onClick={() => { resetDemoData(); window.location.reload(); }} className="w-full h-10 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer">
-          Reiniciar datos de la demo
-        </button>
-      ) : null}
-      <button type="button" onClick={store.mode === 'demo' ? () => navigate('/') : onLogout} className="w-full h-11 px-3 rounded-xl flex items-center gap-3 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer">
-        {store.mode === 'demo' ? <ExternalLink className="w-5 h-5" /> : <LogOut className="w-5 h-5" />} {store.mode === 'demo' ? 'Salir de la demo' : 'Cerrar sesión'}
+      <button type="button" onClick={onLogout} className="w-full h-11 px-3 rounded-xl flex items-center gap-3 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer">
+        <LogOut className="w-5 h-5" /> Cerrar sesión
       </button>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 lg:pl-64">
-      {/* Barra lateral (escritorio) */}
       <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col gap-6 p-4 bg-[#0b1222] border-r border-slate-800">
         <button type="button" onClick={() => go('inicio')} className="px-2 pt-2 text-left cursor-pointer"><Logo className="h-8" light /></button>
         <div className="px-3">
@@ -263,7 +271,6 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
         <Account />
       </aside>
 
-      {/* Barra superior (celular y tablet) */}
       <header className="lg:hidden sticky top-0 z-30 h-14 px-4 flex items-center justify-between bg-[#0b1222]/95 backdrop-blur border-b border-slate-800">
         <div className="min-w-0">
           <p className="text-sm font-bold text-white truncate">{ctx.config.shortName || ctx.config.institutionName}</p>
@@ -288,23 +295,20 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
         </div>
       )}
 
-      {store.mode === 'demo' && (
-        <div className="bg-amber-500/10 border-b border-amber-500/30 text-amber-200 text-xs sm:text-sm px-4 py-2 text-center">
-          Modo demostración: los datos son de ejemplo y se guardan solo en este navegador.
-        </div>
-      )}
-
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-10">
+      <main key={current.id} className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-10 animate-fade-up">
         {current.id === 'inicio' && <HomeTab ctx={ctx} />}
+        {current.id === 'area' && <AreaTab ctx={ctx} />}
         {current.id === 'asistencia' && <AttendanceTab ctx={ctx} />}
         {current.id === 'estudiantes' && <StudentsTab ctx={ctx} />}
         {current.id === 'notas' && <GradesTab ctx={ctx} />}
-        {current.id === 'docentes' && <TeachersTab ctx={ctx} />}
+        {current.id === 'planificacion' && <PlanningTab ctx={ctx} />}
+        {current.id === 'actividades' && <TasksTab ctx={ctx} />}
+        {current.id === 'fisica' && <FitnessTab ctx={ctx} />}
+        {current.id === 'equipo' && <TeamTab ctx={ctx} />}
         {current.id === 'comunicados' && <AnnouncementsTab ctx={ctx} />}
         {current.id === 'configuracion' && <SettingsTab ctx={ctx} />}
       </main>
 
-      {/* Navegación inferior (celular) */}
       <nav aria-label="Accesos rápidos" className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0b1222]/95 backdrop-blur border-t border-slate-800 grid pb-[env(safe-area-inset-bottom)]" style={{ gridTemplateColumns: `repeat(${bottom.length + 1}, minmax(0, 1fr))` }}>
         {bottom.map((n) => (
           <button key={n.id} type="button" onClick={() => go(n.id)} aria-current={n.id === current.id ? 'page' : undefined}
@@ -319,7 +323,7 @@ export default function Panel({ store, onLogout }: { store: DataStore; onLogout:
 
       <div className="fixed z-[60] bottom-20 lg:bottom-6 right-4 left-4 sm:left-auto sm:w-96 space-y-2" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`px-4 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-start gap-2.5 border ${t.kind === 'ok' ? 'bg-emerald-950 border-emerald-700 text-emerald-100' : 'bg-rose-950 border-rose-700 text-rose-100'}`}>
+          <div key={t.id} className={`px-4 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-start gap-2.5 border animate-fade-up ${t.kind === 'ok' ? 'bg-emerald-950 border-emerald-700 text-emerald-100' : 'bg-rose-950 border-rose-700 text-rose-100'}`}>
             {t.kind === 'ok' ? <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" /> : <TriangleAlert className="w-5 h-5 shrink-0 text-rose-400" />}
             <span>{t.text}</span>
           </div>

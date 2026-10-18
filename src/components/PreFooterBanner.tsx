@@ -30,7 +30,7 @@ export default function PreFooterBanner({ onOpenDemoModal }: PreFooterBannerProp
               onClick={onOpenDemoModal}
               className="px-7 py-3.5 text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 rounded-full shadow-lg shadow-orange-500/30 active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-2"
             >
-              <span>Solicitar Demostración</span>
+              <span>Solicitar información</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

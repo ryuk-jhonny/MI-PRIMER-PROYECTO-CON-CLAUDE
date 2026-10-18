@@ -1,15 +1,45 @@
-import { Student, Teacher } from '../types/education';
-import { InstitutionConfig, DirectorProfile, DEFAULT_INSTITUTION_CONFIG, DEFAULT_DIRECTOR_PROFILE } from '../types/institution';
-import { INITIAL_STUDENTS, INITIAL_TEACHERS } from '../data/mockData';
-import { requireSupabase } from './supabase';
-import { canonicalGrades } from './school';
+import {
+  collection, deleteDoc, doc, Firestore, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, runTransaction,
+  setDoc, updateDoc, where, writeBatch, WriteBatch,
+} from 'firebase/firestore';
+import { Student } from '../types/education';
+import { DEFAULT_DIRECTOR_PROFILE, DEFAULT_INSTITUTION_CONFIG, DirectorProfile, InstitutionConfig } from '../types/institution';
+import type { Level } from './cneb';
+import { fb } from './firebase';
 
 // =====================================================================
 // Tipos compartidos
 // =====================================================================
 
-export type Role = 'director' | 'docente' | 'auxiliar';
+export type StaffRole = 'director' | 'docente' | 'auxiliar';
+export type Role = StaffRole | 'estudiante' | 'familia';
 export type AttendanceStatus = 'Puntual' | 'Tardanza' | 'Justificada' | 'Inasistencia';
+
+export const ROLE_LABEL: Record<Role, string> = {
+  director: 'Dirección',
+  docente: 'Docente',
+  auxiliar: 'Personal de puerta',
+  estudiante: 'Estudiante',
+  familia: 'Familia',
+};
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  fullName: string;
+  role: Role;
+  institutionId: string;
+  /** Docentes: áreas CNEB que enseña. */
+  areas?: string[];
+  /** Docentes: niveles donde enseña. */
+  levels?: Level[];
+  /** Docentes: aulas a su cargo ("3ro Primaria · A"). Vacío = todas. */
+  aulas?: string[];
+  /** Estudiante (uno) o familia (uno o más hijos). */
+  studentIds?: string[];
+  phone?: string;
+  createdAt?: string;
+}
 
 export interface AttendanceRecord {
   id: string;
@@ -22,17 +52,11 @@ export interface AttendanceRecord {
 
 export interface Announcement {
   id: string;
-  audience: 'all' | 'inicial' | 'primaria' | 'secundaria';
+  audience: 'all' | 'primaria' | 'secundaria';
   body: string;
   authorName: string;
+  authorUid: string;
   createdAt: string;
-}
-
-export interface Member {
-  userId: string;
-  role: Role;
-  fullName: string;
-  email: string;
 }
 
 export interface ScanResult {
@@ -44,34 +68,86 @@ export interface ScanResult {
   time?: string;
 }
 
+export type PlanStatus = 'Borrador' | 'Enviado' | 'Observado' | 'Visado';
+
+export interface Plan {
+  id: string;
+  kind: 'unidad' | 'sesion';
+  ownerUid: string;
+  ownerName: string;
+  area: string;
+  level: Level;
+  grade: string;
+  section: string;
+  title: string;
+  period: string;
+  date: string;
+  duration: string;
+  situacion: string;
+  proposito: string;
+  competencias: string[];
+  capacidades: string[];
+  desempenos: string;
+  criterios: string;
+  evidencia: string;
+  instrumento: string;
+  enfoques: string[];
+  inicio: string;
+  desarrollo: string;
+  cierre: string;
+  materiales: string;
+  status: PlanStatus;
+  observacion: string;
+  updatedAt: string;
+}
+
+export interface Task {
+  id: string;
+  ownerUid: string;
+  ownerName: string;
+  area: string;
+  aula: string;
+  title: string;
+  instructions: string;
+  dueDate: string;
+  competencia: string;
+  createdAt: string;
+}
+
+export interface TaskResponse {
+  studentId: string;
+  studentName: string;
+  text: string;
+  submittedAt: string;
+  feedback?: string;
+  literal?: string;
+  reviewedAt?: string;
+  reviewer?: string;
+}
+
+export interface FitnessRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  aula: string;
+  date: string;
+  weightKg: number;
+  heightCm: number;
+  imc: number;
+  flexCm?: number | null;
+  abdominales?: number | null;
+  cooperM?: number | null;
+  notes: string;
+  ownerUid: string;
+  createdAt: string;
+}
+
+export interface Codes { docente: string; auxiliar: string }
+
 export interface WorkspaceData {
   config: InstitutionConfig;
   profile: DirectorProfile;
   students: Student[];
-  teachers: Teacher[];
-  codes?: { teacher: string; staff: string };
-}
-
-export interface DataStore {
-  mode: 'cloud' | 'demo';
-  role: Role;
-  userName: string;
-  load(): Promise<WorkspaceData>;
-  saveConfig(config: InstitutionConfig): Promise<void>;
-  saveProfile(profile: DirectorProfile): Promise<void>;
-  saveStudents(next: Student[]): Promise<void>;
-  saveTeachers(next: Teacher[]): Promise<void>;
-  listAttendance(day: string): Promise<AttendanceRecord[]>;
-  registerScan(token: string): Promise<ScanResult>;
-  setAttendanceStatus(recordId: string, status: AttendanceStatus): Promise<void>;
-  closeDay(day: string): Promise<number>;
-  listAnnouncements(): Promise<Announcement[]>;
-  addAnnouncement(audience: Announcement['audience'], body: string): Promise<void>;
-  deleteAnnouncement(id: string): Promise<void>;
-  listMembers(): Promise<Member[]>;
-  removeMember(userId: string): Promise<void>;
-  rotateCodes(): Promise<{ teacher: string; staff: string }>;
-  subscribeAttendance(onChange: () => void): () => void;
 }
 
 // =====================================================================
@@ -84,34 +160,30 @@ export function randomToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/** Código legible sin letras que se confunden (sin 0/O ni 1/I). */
+export function randomCode(length = 8): string {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}
+
+export function normalizeCode(text: string): string {
+  return text.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 export function portalUrl(token: string): string {
   return `${window.location.origin}/c/${token}`;
 }
 
 /** Saca el código del carnet a partir del texto leído en el QR. */
 export function tokenFromQr(value: string): string | null {
-  const v = value.trim();
+  const v = (value || '').trim();
   const m = v.match(/\/c\/([a-f0-9]{16,64})\/?$/i);
   if (m) return m[1].toLowerCase();
   if (/^[a-f0-9]{16,64}$/i.test(v)) return v.toLowerCase();
   return null;
-}
-
-/**
- * Garantiza que cada alumno tenga un identificador único global (para que no choque
- * con el de otro colegio) y un QR seguro que abre su portal.
- */
-export function normalizeStudents(list: Student[]): Student[] {
-  return list.map((s) => {
-    let out = s;
-    if (!s.id?.startsWith('st_')) out = { ...out, id: `st_${randomToken()}` };
-    if (!tokenFromQr(s.qrCodeValue || '')) out = { ...out, qrCodeValue: portalUrl(randomToken()) };
-    return out;
-  });
-}
-
-export function normalizeTeachers(list: Teacher[]): Teacher[] {
-  return list.map((t) => (t.id?.startsWith('tc_') ? t : { ...t, id: `tc_${randomToken()}` }));
 }
 
 export function todayIn(timeZone = 'America/Lima'): string {
@@ -122,7 +194,7 @@ export function todayIn(timeZone = 'America/Lima'): string {
   }
 }
 
-function nowTimeIn(timeZone = 'America/Lima'): string {
+export function nowTimeIn(timeZone = 'America/Lima'): string {
   try {
     return new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date());
   } catch {
@@ -130,7 +202,14 @@ function nowTimeIn(timeZone = 'America/Lima'): string {
   }
 }
 
-export function withCounters(s: Student, c: { present: number; late: number; absent: number; justified: number }): Student {
+/** Puntual hasta la hora límite (incluida); después, tardanza. */
+export function statusForTime(time: string, cutoff: string): AttendanceStatus {
+  return time <= `${cutoff || '07:45'}:59` ? 'Puntual' : 'Tardanza';
+}
+
+export interface Counters { present: number; late: number; absent: number; justified: number }
+
+export function withCounters(s: Student, c: Counters): Student {
   const total = c.present + c.late + c.absent + c.justified;
   const attended = c.present + c.late + c.justified;
   return {
@@ -138,334 +217,428 @@ export function withCounters(s: Student, c: { present: number; late: number; abs
     presentDays: c.present,
     lateDays: c.late,
     absentDays: c.absent,
+    justifiedDays: c.justified,
     totalDays: total,
     attendanceRate: total > 0 ? Math.round((attended / total) * 1000) / 10 : 0,
   };
 }
 
-function stripCounters(s: Student): Student {
-  const { presentDays, lateDays, absentDays, totalDays, attendanceRate, attendanceHistory, ...rest } = s;
-  void presentDays; void lateDays; void absentDays; void totalDays; void attendanceRate; void attendanceHistory;
-  return { ...rest, presentDays: 0, lateDays: 0, absentDays: 0, totalDays: 0, attendanceRate: 0 } as Student;
-}
-
-// =====================================================================
-// Modo demostración: todo vive en este navegador
-// =====================================================================
-
-const K = {
-  config: 'ryuk_demo_config',
-  profile: 'ryuk_demo_profile',
-  students: 'ryuk_demo_students',
-  teachers: 'ryuk_demo_teachers',
-  attendance: 'ryuk_demo_attendance',
-  announcements: 'ryuk_demo_announcements',
+const COUNTER_FIELD: Record<AttendanceStatus, 'presentDays' | 'lateDays' | 'absentDays' | 'justifiedDays'> = {
+  Puntual: 'presentDays', Tardanza: 'lateDays', Inasistencia: 'absentDays', Justificada: 'justifiedDays',
 };
 
-function read<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function write(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* almacenamiento lleno o bloqueado: se mantiene en memoria */
-  }
-}
-
-/** Historial de ejemplo de los últimos 15 días hábiles (sin incluir hoy). */
-function seedDemoAttendance(students: Student[]): AttendanceRecord[] {
-  const out: AttendanceRecord[] = [];
-  const d = new Date();
-  let added = 0;
-  while (added < 15) {
-    d.setDate(d.getDate() - 1);
-    const wd = d.getDay();
-    if (wd === 0 || wd === 6) continue;
-    added++;
-    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
-    students.forEach((s, i) => {
-      const r = (i * 7 + added * 13) % 29;
-      const status: AttendanceStatus = r === 0 ? 'Inasistencia' : r < 3 ? 'Tardanza' : r === 3 ? 'Justificada' : 'Puntual';
-      const minute = status === 'Tardanza' ? 50 + (r % 9) : 20 + ((i + added) % 24);
-      out.push({
-        id: randomToken(), studentId: s.id, day, status, recordedBy: 'Datos de ejemplo',
-        time: status === 'Inasistencia' ? null : `07:${String(minute).padStart(2, '0')}:00`,
-      });
-    });
-  }
-  return out;
-}
-
-export function createDemoStore(): DataStore {
-  const tz = () => read<InstitutionConfig>(K.config, DEFAULT_INSTITUTION_CONFIG).timeZone || 'America/Lima';
-
-  const recount = (studentId: string) => {
-    const recs = read<AttendanceRecord[]>(K.attendance, []).filter((r) => r.studentId === studentId);
-    const students = read<Student[]>(K.students, []);
-    const c = { present: 0, late: 0, absent: 0, justified: 0 };
-    recs.forEach((r) => {
-      if (r.status === 'Puntual') c.present++;
-      else if (r.status === 'Tardanza') c.late++;
-      else if (r.status === 'Inasistencia') c.absent++;
-      else c.justified++;
-    });
-    write(K.students, students.map((s) => (s.id === studentId ? withCounters(s, c) : s)));
-  };
-
-  const listeners = new Set<() => void>();
-  const notify = () => listeners.forEach((fn) => fn());
-
-  return {
-    mode: 'demo',
-    role: 'director',
-    userName: read<DirectorProfile>(K.profile, DEFAULT_DIRECTOR_PROFILE).name,
-    async load() {
-      if (!localStorage.getItem(K.students)) {
-        const seeded = normalizeStudents(INITIAL_STUDENTS.map((s) => canonicalGrades(stripCounters(s))));
-        write(K.students, seeded);
-        write(K.attendance, seedDemoAttendance(seeded));
-        seeded.forEach((s) => recount(s.id));
-      }
-      if (!localStorage.getItem(K.teachers)) write(K.teachers, normalizeTeachers(INITIAL_TEACHERS));
-      if (!localStorage.getItem(K.config)) write(K.config, DEFAULT_INSTITUTION_CONFIG);
-      return {
-        config: { ...DEFAULT_INSTITUTION_CONFIG, ...read(K.config, DEFAULT_INSTITUTION_CONFIG) },
-        profile: { ...DEFAULT_DIRECTOR_PROFILE, ...read(K.profile, DEFAULT_DIRECTOR_PROFILE) },
-        students: normalizeStudents(read<Student[]>(K.students, [])),
-        teachers: read<Teacher[]>(K.teachers, []),
-        codes: { teacher: 'DEMO-DOC', staff: 'DEMO-AUX' },
-      };
-    },
-    async saveConfig(config) { write(K.config, config); },
-    async saveProfile(profile) { write(K.profile, profile); },
-    async saveStudents(next) {
-      write(K.students, next);
-      const ids = new Set(next.map((s) => s.id));
-      write(K.attendance, read<AttendanceRecord[]>(K.attendance, []).filter((r) => ids.has(r.studentId)));
-    },
-    async saveTeachers(next) { write(K.teachers, next); },
-    async listAttendance(day) {
-      return read<AttendanceRecord[]>(K.attendance, []).filter((r) => r.day === day);
-    },
-    async registerScan(token) {
-      const students = read<Student[]>(K.students, []);
-      const st = students.find((s) => tokenFromQr(s.qrCodeValue) === token);
-      if (!st) return { ok: false, error: 'QR no registrado en este colegio' };
-      const cfg = read<InstitutionConfig>(K.config, DEFAULT_INSTITUTION_CONFIG);
-      const day = todayIn(tz());
-      const all = read<AttendanceRecord[]>(K.attendance, []);
-      const existing = all.find((r) => r.studentId === st.id && r.day === day);
-      if (existing) return { ok: true, duplicate: true, student: st, status: existing.status, time: existing.time || '' };
-      const time = nowTimeIn(tz());
-      const cutoff = (cfg.punctualCutoffTime || '07:45') + ':00';
-      const status: AttendanceStatus = time <= cutoff ? 'Puntual' : 'Tardanza';
-      all.push({ id: randomToken(), studentId: st.id, day, time, status, recordedBy: 'Modo demo' });
-      write(K.attendance, all);
-      recount(st.id);
-      notify();
-      return { ok: true, duplicate: false, student: st, status, time };
-    },
-    async setAttendanceStatus(recordId, status) {
-      const all = read<AttendanceRecord[]>(K.attendance, []);
-      const rec = all.find((r) => r.id === recordId);
-      if (!rec) return;
-      rec.status = status;
-      write(K.attendance, all);
-      recount(rec.studentId);
-      notify();
-    },
-    async closeDay(day) {
-      const students = read<Student[]>(K.students, []);
-      const all = read<AttendanceRecord[]>(K.attendance, []);
-      const seen = new Set(all.filter((r) => r.day === day).map((r) => r.studentId));
-      const missing = students.filter((s) => !seen.has(s.id));
-      missing.forEach((s) => all.push({ id: randomToken(), studentId: s.id, day, time: null, status: 'Inasistencia', recordedBy: 'Cierre del día' }));
-      write(K.attendance, all);
-      missing.forEach((s) => recount(s.id));
-      notify();
-      return missing.length;
-    },
-    async listAnnouncements() { return read<Announcement[]>(K.announcements, []); },
-    async addAnnouncement(audience, body) {
-      const list = read<Announcement[]>(K.announcements, []);
-      const author = read<DirectorProfile>(K.profile, DEFAULT_DIRECTOR_PROFILE).name;
-      write(K.announcements, [{ id: randomToken(), audience, body, authorName: author, createdAt: new Date().toISOString() }, ...list]);
-    },
-    async deleteAnnouncement(id) {
-      write(K.announcements, read<Announcement[]>(K.announcements, []).filter((a) => a.id !== id));
-    },
-    async listMembers() {
-      const p = read<DirectorProfile>(K.profile, DEFAULT_DIRECTOR_PROFILE);
-      return [{ userId: 'demo', role: 'director', fullName: p.name, email: p.email }];
-    },
-    async removeMember() { /* sin equipo en modo demo */ },
-    async rotateCodes() { return { teacher: 'DEMO-DOC', staff: 'DEMO-AUX' }; },
-    subscribeAttendance(onChange) {
-      listeners.add(onChange);
-      const onStorage = (e: StorageEvent) => { if (e.key === K.attendance) onChange(); };
-      window.addEventListener('storage', onStorage);
-      return () => { listeners.delete(onChange); window.removeEventListener('storage', onStorage); };
-    },
-  };
-}
-
-/** Borra los datos del modo demostración para empezar de cero. */
-export function resetDemoData() {
-  Object.values(K).forEach((k) => { try { localStorage.removeItem(k); } catch { /* nada */ } });
-}
-
-// =====================================================================
-// Modo nube (Supabase)
-// =====================================================================
-
-interface StudentRow {
-  id: string;
-  qr_token: string;
-  data: Student;
-  present_days: number;
-  late_days: number;
-  absent_days: number;
-  justified_days: number;
-}
-
-export function createCloudStore(institutionId: string, role: Role, userName: string): DataStore {
-  const sb = requireSupabase();
-  let studentSnapshot = new Map<string, string>();
-  let teacherSnapshot = new Map<string, string>();
-
-  const check = <T,>(res: { data: T; error: unknown }): T => {
-    if (res.error) throw res.error;
-    return res.data;
-  };
-
-  const mapRecord = (r: { id: string; student_id: string; day: string; time_in: string | null; status: AttendanceStatus; recorded_by_name: string }): AttendanceRecord => ({
-    id: r.id, studentId: r.student_id, day: r.day, time: r.time_in, status: r.status, recordedBy: r.recorded_by_name,
+/** Aplica en memoria el cambio de contadores de asistencia de un alumno. */
+export function bumpCounters(s: Student, status: AttendanceStatus, delta: 1 | -1): Student {
+  return withCounters(s, {
+    present: (s.presentDays || 0) + (status === 'Puntual' ? delta : 0),
+    late: (s.lateDays || 0) + (status === 'Tardanza' ? delta : 0),
+    absent: (s.absentDays || 0) + (status === 'Inasistencia' ? delta : 0),
+    justified: (s.justifiedDays || 0) + (status === 'Justificada' ? delta : 0),
   });
+}
+
+const nowIso = () => new Date().toISOString();
+
+/** Firestore no acepta `undefined`; esto deja solo valores guardables. */
+function clean<T>(v: T): T {
+  return JSON.parse(JSON.stringify(v)) as T;
+}
+
+/** Campos del alumno que se guardan (sin los derivados). */
+function studentDoc(s: Student, institutionId: string) {
+  const { qrCodeValue, attendanceRate, attendanceHistory, ...rest } = s;
+  void attendanceRate; void attendanceHistory;
+  return clean({ ...rest, institutionId, qrToken: tokenFromQr(qrCodeValue) || randomToken(), updatedAt: nowIso() });
+}
+
+function studentFromDoc(id: string, d: Record<string, unknown>): Student {
+  const s = d as unknown as Student & { qrToken: string };
+  return withCounters({ ...s, id, qrCodeValue: portalUrl(s.qrToken) }, {
+    present: s.presentDays || 0, late: s.lateDays || 0, absent: s.absentDays || 0, justified: s.justifiedDays || 0,
+  });
+}
+
+/** Lo que ve la familia al escanear el carnet (sin DNI, dirección ni teléfono). */
+function portalSnapshot(s: Student, institutionId: string, config: InstitutionConfig) {
+  return clean({
+    institutionId,
+    student: { fullName: s.fullName, gradeLevel: s.gradeLevel, section: s.section, avatarUrl: s.avatarUrl || '', grades: s.grades || [] },
+    institution: {
+      name: config.institutionName, shortName: config.shortName, academicYear: config.academicYear,
+      activePeriod: config.activePeriod, periodType: config.periodType,
+    },
+    updatedAt: nowIso(),
+  });
+}
+
+async function commitInChunks(db: Firestore, ops: ((b: WriteBatch) => void)[], perBatch = 400) {
+  for (let i = 0; i < ops.length; i += perBatch) {
+    const b = writeBatch(db);
+    ops.slice(i, i + perBatch).forEach((op) => op(b));
+    await b.commit();
+  }
+}
+
+// =====================================================================
+// Panel del personal (dirección, docentes y personal de puerta)
+// =====================================================================
+
+export type StaffStore = ReturnType<typeof createStaffStore>;
+
+export function createStaffStore(me: UserProfile) {
+  const { db } = fb();
+  const iid = me.institutionId;
+  const role = me.role as StaffRole;
+  const inst = doc(db, 'institutions', iid);
+  const col = (name: string) => collection(db, 'institutions', iid, name);
+  const sub = (name: string, id: string) => doc(db, 'institutions', iid, name, id);
+  let config: InstitutionConfig = DEFAULT_INSTITUTION_CONFIG;
+
+  const syncPortal = (b: WriteBatch, s: Student) => {
+    const token = tokenFromQr(s.qrCodeValue);
+    if (token) b.set(doc(db, 'portals', token), portalSnapshot(s, iid, config), { merge: true });
+  };
 
   return {
-    mode: 'cloud',
+    me,
     role,
-    userName,
-    async load() {
-      const inst = check(await sb.from('institutions').select('name, config, director_profile, teacher_code, staff_code').eq('id', institutionId).single()) as {
-        name: string; config: InstitutionConfig; director_profile: DirectorProfile; teacher_code: string; staff_code: string;
-      };
-      const rows = check(await sb.from('students').select('id, qr_token, data, present_days, late_days, absent_days, justified_days').eq('institution_id', institutionId).order('updated_at', { ascending: false }).limit(5000)) as StudentRow[];
-      const tRows = check(await sb.from('teachers').select('id, data').eq('institution_id', institutionId).order('updated_at', { ascending: false })) as { id: string; data: Teacher }[];
-      const config = { ...DEFAULT_INSTITUTION_CONFIG, ...inst.config };
-      const students = rows.map((r) =>
-        withCounters({ ...r.data, id: r.id, qrCodeValue: portalUrl(r.qr_token) }, {
-          present: r.present_days, late: r.late_days, absent: r.absent_days, justified: r.justified_days,
-        }),
-      );
-      studentSnapshot = new Map(students.map((s) => [s.id, JSON.stringify(stripCounters(s))]));
-      const teachers = tRows.map((r) => ({ ...r.data, id: r.id }));
-      teacherSnapshot = new Map(teachers.map((t) => [t.id, JSON.stringify(t)]));
-      return {
-        config,
-        profile: { ...DEFAULT_DIRECTOR_PROFILE, ...inst.director_profile },
-        students,
-        teachers,
-        codes: role === 'director' ? { teacher: inst.teacher_code, staff: inst.staff_code } : undefined,
-      };
+    userName: me.fullName,
+
+    async load(): Promise<WorkspaceData> {
+      const snap = await getDoc(inst);
+      if (!snap.exists()) throw new Error('No encontramos tu colegio. Es posible que la dirección te haya quitado el acceso.');
+      const d = snap.data();
+      config = { ...DEFAULT_INSTITUTION_CONFIG, ...(d.config || {}) };
+      const rows = await getDocs(query(col('students'), limit(5000)));
+      const students = rows.docs.map((r) => studentFromDoc(r.id, r.data())).sort((a, b) => a.fullName.localeCompare(b.fullName));
+      return { config, profile: { ...DEFAULT_DIRECTOR_PROFILE, ...(d.profile || {}) }, students };
     },
-    async saveConfig(config) {
-      check(await sb.from('institutions').update({ config, name: config.institutionName }).eq('id', institutionId));
+
+    async saveConfig(next: InstitutionConfig) {
+      config = next;
+      await updateDoc(inst, { config: clean(next), name: next.institutionName, updatedAt: nowIso() });
     },
-    async saveProfile(profile) {
-      check(await sb.from('institutions').update({ director_profile: profile }).eq('id', institutionId));
+
+    async saveProfile(profile: DirectorProfile) {
+      await updateDoc(inst, { profile: clean(profile), updatedAt: nowIso() });
     },
-    async saveStudents(next) {
-      const nextMap = new Map(next.map((s) => [s.id, JSON.stringify(stripCounters(s))]));
-      const changed = next.filter((s) => studentSnapshot.get(s.id) !== nextMap.get(s.id));
-      const removed = [...studentSnapshot.keys()].filter((id) => !nextMap.has(id));
-      if (role !== 'director') {
-        // Docentes solo pueden actualizar (notas), no crear ni borrar alumnos.
-        for (const s of changed) {
-          check(await sb.from('students').update({ data: stripCounters(s), updated_at: new Date().toISOString() }).eq('id', s.id));
+
+    /** Matricula alumnos nuevos con su QR y sus códigos de acceso. */
+    async addStudents(list: Student[]): Promise<Student[]> {
+      const out = list.map((s) => ({
+        ...withCounters(s, { present: 0, late: 0, absent: 0, justified: 0 }),
+        id: s.id?.startsWith('st_') ? s.id : `st_${randomToken()}`,
+        qrCodeValue: tokenFromQr(s.qrCodeValue) ? s.qrCodeValue : portalUrl(randomToken()),
+        studentCode: s.studentCode || randomCode(10),
+        familyCode: s.familyCode || randomCode(10),
+      }));
+      await commitInChunks(db, out.map((s) => (b: WriteBatch) => {
+        b.set(sub('students', s.id), { ...studentDoc(s, iid), createdAt: nowIso() });
+        b.set(doc(db, 'linkCodes', s.studentCode!), { institutionId: iid, studentId: s.id, kind: 'estudiante' });
+        b.set(doc(db, 'linkCodes', s.familyCode!), { institutionId: iid, studentId: s.id, kind: 'familia' });
+        syncPortal(b, s);
+      }), 100);
+      return out;
+    },
+
+    /** Dirección: guarda la ficha completa. Docentes: solo las notas. */
+    async updateStudents(list: Student[]) {
+      await commitInChunks(db, list.map((s) => (b: WriteBatch) => {
+        if (role === 'director') {
+          const { presentDays, lateDays, absentDays, justifiedDays, totalDays, ...data } = studentDoc(s, iid) as Record<string, unknown>;
+          void presentDays; void lateDays; void absentDays; void justifiedDays; void totalDays;
+          b.update(sub('students', s.id), data);
+        } else {
+          b.update(sub('students', s.id), { grades: clean(s.grades || []), updatedAt: nowIso() });
         }
-        studentSnapshot = new Map([...studentSnapshot, ...changed.map((s) => [s.id, nextMap.get(s.id)!] as [string, string])]);
-        return;
-      }
-      for (let i = 0; i < changed.length; i += 300) {
-        const batch = changed.slice(i, i + 300).map((s) => ({
-          id: s.id,
-          institution_id: institutionId,
-          qr_token: tokenFromQr(s.qrCodeValue) || randomToken(),
-          data: stripCounters(s),
-          updated_at: new Date().toISOString(),
-        }));
-        check(await sb.from('students').upsert(batch, { onConflict: 'id' }));
-      }
-      for (let i = 0; i < removed.length; i += 300) {
-        check(await sb.from('students').delete().in('id', removed.slice(i, i + 300)).eq('institution_id', institutionId));
-      }
-      studentSnapshot = nextMap;
+        syncPortal(b, s);
+      }), 200);
     },
-    async saveTeachers(next) {
-      const nextMap = new Map(next.map((t) => [t.id, JSON.stringify(t)]));
-      const changed = next.filter((t) => teacherSnapshot.get(t.id) !== nextMap.get(t.id));
-      const removed = [...teacherSnapshot.keys()].filter((id) => !nextMap.has(id));
-      if (changed.length) {
-        check(await sb.from('teachers').upsert(changed.map((t) => ({ id: t.id, institution_id: institutionId, data: t, updated_at: new Date().toISOString() })), { onConflict: 'id' }));
+
+    /** Genera un QR nuevo: el carnet anterior deja de funcionar. */
+    async replaceQr(s: Student): Promise<Student> {
+      const old = tokenFromQr(s.qrCodeValue);
+      const next = { ...s, qrCodeValue: portalUrl(randomToken()) };
+      const b = writeBatch(db);
+      b.update(sub('students', s.id), { qrToken: tokenFromQr(next.qrCodeValue), updatedAt: nowIso() });
+      if (old) b.delete(doc(db, 'portals', old));
+      b.set(doc(db, 'portals', tokenFromQr(next.qrCodeValue)!), portalSnapshot(next, iid, config));
+      await b.commit();
+      return next;
+    },
+
+    async deleteStudent(s: Student) {
+      const b = writeBatch(db);
+      b.delete(sub('students', s.id));
+      if (s.studentCode) b.delete(doc(db, 'linkCodes', s.studentCode));
+      if (s.familyCode) b.delete(doc(db, 'linkCodes', s.familyCode));
+      const token = tokenFromQr(s.qrCodeValue);
+      if (token) b.delete(doc(db, 'portals', token));
+      await b.commit();
+      const recs = await getDocs(query(col('attendance'), where('studentId', '==', s.id)));
+      await commitInChunks(db, recs.docs.map((r) => (bb: WriteBatch) => bb.delete(r.ref)));
+    },
+
+    // ----- Asistencia -----
+
+    watchAttendance(day: string, onChange: (list: AttendanceRecord[]) => void, onError?: (e: unknown) => void) {
+      return onSnapshot(
+        query(col('attendance'), where('day', '==', day)),
+        (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AttendanceRecord, 'id'>) }))),
+        (e) => onError?.(e),
+      );
+    },
+
+    async registerScan(token: string, known?: Student[]): Promise<ScanResult> {
+      let st = known?.find((s) => tokenFromQr(s.qrCodeValue) === token);
+      if (!st) {
+        const found = await getDocs(query(col('students'), where('qrToken', '==', token), limit(1)));
+        if (found.empty) return { ok: false, error: 'QR no registrado en este colegio.' };
+        st = studentFromDoc(found.docs[0].id, found.docs[0].data());
       }
-      if (removed.length) check(await sb.from('teachers').delete().in('id', removed).eq('institution_id', institutionId));
-      teacherSnapshot = nextMap;
-    },
-    async listAttendance(day) {
-      const rows = check(await sb.from('attendance').select('id, student_id, day, time_in, status, recorded_by_name').eq('institution_id', institutionId).eq('day', day).order('created_at', { ascending: false }).limit(5000));
-      return (rows as Parameters<typeof mapRecord>[0][]).map(mapRecord);
-    },
-    async registerScan(token) {
-      const res = check(await sb.rpc('register_scan', { p_token: token })) as ScanResult;
+      const tz = config.timeZone || 'America/Lima';
+      const day = todayIn(tz);
+      const time = nowTimeIn(tz);
+      const status = statusForTime(time, config.punctualCutoffTime);
+      const ref = sub('attendance', `${day}_${st.id}`);
+      const student = st;
+      const res = await runTransaction(db, async (tx) => {
+        const cur = await tx.get(ref);
+        if (cur.exists()) {
+          const d = cur.data() as AttendanceRecord;
+          return { ok: true, duplicate: true, student, status: d.status, time: d.time || '' } as ScanResult;
+        }
+        tx.set(ref, { studentId: student.id, day, time, status, recordedBy: me.fullName, createdAt: nowIso() });
+        tx.update(sub('students', student.id), { [COUNTER_FIELD[status]]: increment(1), totalDays: increment(1) });
+        tx.set(doc(db, 'portals', token), { institutionId: iid, att: { [day]: { t: time.slice(0, 5), s: status } } }, { merge: true });
+        return { ok: true, duplicate: false, student, status, time } as ScanResult;
+      });
       return res;
     },
-    async setAttendanceStatus(recordId, status) {
-      check(await sb.from('attendance').update({ status }).eq('id', recordId));
+
+    async setAttendanceStatus(rec: AttendanceRecord, status: AttendanceStatus, s?: Student) {
+      if (rec.status === status) return;
+      const b = writeBatch(db);
+      b.update(sub('attendance', rec.id), { status, editedBy: me.fullName, editedAt: nowIso() });
+      b.update(sub('students', rec.studentId), { [COUNTER_FIELD[rec.status]]: increment(-1), [COUNTER_FIELD[status]]: increment(1) });
+      const token = s && tokenFromQr(s.qrCodeValue);
+      if (token) b.set(doc(db, 'portals', token), { institutionId: iid, att: { [rec.day]: { t: rec.time?.slice(0, 5) || '', s: status } } }, { merge: true });
+      await b.commit();
     },
-    async closeDay(day) {
-      return check(await sb.rpc('close_day', { inst: institutionId, p_day: day })) as number;
+
+    /** Marca como inasistencia a quienes no registraron ingreso en el día. */
+    async closeDay(day: string, students: Student[], records: AttendanceRecord[]): Promise<number> {
+      const seen = new Set(records.map((r) => r.studentId));
+      const missing = students.filter((s) => !seen.has(s.id));
+      await commitInChunks(db, missing.map((s) => (b: WriteBatch) => {
+        b.set(sub('attendance', `${day}_${s.id}`), { studentId: s.id, day, time: null, status: 'Inasistencia', recordedBy: 'Cierre del día', createdAt: nowIso() });
+        b.update(sub('students', s.id), { absentDays: increment(1), totalDays: increment(1) });
+        const token = tokenFromQr(s.qrCodeValue);
+        if (token) b.set(doc(db, 'portals', token), { institutionId: iid, att: { [day]: { t: '', s: 'Inasistencia' } } }, { merge: true });
+      }), 120);
+      return missing.length;
     },
-    async listAnnouncements() {
-      const rows = check(await sb.from('announcements').select('id, audience, body, author_name, created_at').eq('institution_id', institutionId).order('created_at', { ascending: false }).limit(50)) as {
-        id: string; audience: Announcement['audience']; body: string; author_name: string; created_at: string;
-      }[];
-      return rows.map((r) => ({ id: r.id, audience: r.audience, body: r.body, authorName: r.author_name, createdAt: r.created_at }));
+
+    // ----- Comunicados -----
+
+    async listAnnouncements(): Promise<Announcement[]> {
+      const snap = await getDocs(query(col('announcements'), orderBy('createdAt', 'desc'), limit(50)));
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Announcement, 'id'>) }));
     },
-    async addAnnouncement(audience, body) {
-      check(await sb.from('announcements').insert({ institution_id: institutionId, audience, body, author_name: userName }));
+
+    async addAnnouncement(audience: Announcement['audience'], body: string) {
+      const id = `an_${randomToken()}`;
+      await setDoc(sub('announcements', id), { audience, body, authorName: me.fullName, authorUid: me.uid, createdAt: nowIso() });
+      await this.syncBoard();
     },
-    async deleteAnnouncement(id) {
-      check(await sb.from('announcements').delete().eq('id', id));
+
+    async deleteAnnouncement(id: string) {
+      await deleteDoc(sub('announcements', id));
+      await this.syncBoard();
     },
-    async listMembers() {
-      const rows = check(await sb.from('members').select('user_id, role, full_name, email').eq('institution_id', institutionId).order('created_at')) as {
-        user_id: string; role: Role; full_name: string; email: string;
-      }[];
-      return rows.map((r) => ({ userId: r.user_id, role: r.role, fullName: r.full_name, email: r.email }));
+
+    /** Publica los últimos comunicados para el portal del carnet (sin cuenta). */
+    async syncBoard() {
+      const list = await this.listAnnouncements();
+      await setDoc(doc(db, 'boards', iid), {
+        institutionId: iid,
+        announcements: list.slice(0, 10).map((a) => ({ body: a.body, author: a.authorName, at: a.createdAt, audience: a.audience })),
+      });
     },
-    async removeMember(userId) {
-      check(await sb.from('members').delete().eq('institution_id', institutionId).eq('user_id', userId));
+
+    // ----- Equipo y códigos -----
+
+    async listMembers(): Promise<UserProfile[]> {
+      const snap = await getDocs(query(collection(db, 'users'), where('institutionId', '==', iid)));
+      return snap.docs.map((d) => d.data() as UserProfile).sort((a, b) => a.role.localeCompare(b.role) || a.fullName.localeCompare(b.fullName));
     },
-    async rotateCodes() {
-      check(await sb.rpc('rotate_join_codes', { inst: institutionId }));
-      const inst = check(await sb.from('institutions').select('teacher_code, staff_code').eq('id', institutionId).single()) as { teacher_code: string; staff_code: string };
-      return { teacher: inst.teacher_code, staff: inst.staff_code };
+
+    async removeMember(uid: string) {
+      await deleteDoc(doc(db, 'users', uid));
     },
-    subscribeAttendance(onChange) {
-      const channel = sb
-        .channel(`attendance-${institutionId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance', filter: `institution_id=eq.${institutionId}` }, () => onChange())
-        .subscribe();
-      const poll = window.setInterval(onChange, 30000);
-      return () => { window.clearInterval(poll); sb.removeChannel(channel); };
+
+    async getCodes(): Promise<Codes | null> {
+      const snap = await getDoc(doc(db, 'institutions', iid, 'private', 'codes'));
+      return snap.exists() ? (snap.data() as Codes) : null;
+    },
+
+    async rotateCodes(): Promise<Codes> {
+      const old = await this.getCodes();
+      const next: Codes = { docente: randomCode(8), auxiliar: randomCode(8) };
+      const b = writeBatch(db);
+      if (old) { b.delete(doc(db, 'joinCodes', old.docente)); b.delete(doc(db, 'joinCodes', old.auxiliar)); }
+      b.set(doc(db, 'joinCodes', next.docente), { institutionId: iid, role: 'docente' });
+      b.set(doc(db, 'joinCodes', next.auxiliar), { institutionId: iid, role: 'auxiliar' });
+      b.set(doc(db, 'institutions', iid, 'private', 'codes'), next);
+      await b.commit();
+      return next;
+    },
+
+    async updateMe(patch: Partial<Pick<UserProfile, 'fullName' | 'areas' | 'levels' | 'aulas' | 'phone'>>) {
+      await updateDoc(doc(db, 'users', me.uid), clean(patch));
+      Object.assign(me, patch);
+    },
+
+    // ----- Planificación (unidades y sesiones) -----
+
+    async listPlans(): Promise<Plan[]> {
+      const q = role === 'director' ? query(col('plans')) : query(col('plans'), where('ownerUid', '==', me.uid));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Plan, 'id'>) })).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+
+    async savePlan(p: Plan): Promise<Plan> {
+      const id = p.id || `pl_${randomToken()}`;
+      const next = { ...p, id, ownerUid: p.ownerUid || me.uid, ownerName: p.ownerName || me.fullName, updatedAt: nowIso() };
+      const { id: _id, ...data } = next;
+      void _id;
+      await setDoc(sub('plans', id), clean(data));
+      return next;
+    },
+
+    async deletePlan(id: string) { await deleteDoc(sub('plans', id)); },
+
+    // ----- Actividades para estudiantes -----
+
+    async listTasks(): Promise<Task[]> {
+      const q = role === 'director' ? query(col('tasks')) : query(col('tasks'), where('ownerUid', '==', me.uid));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Task, 'id'>) })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async saveTask(t: Omit<Task, 'id' | 'ownerUid' | 'ownerName' | 'createdAt'> & Partial<Task>): Promise<void> {
+      const id = t.id || `tk_${randomToken()}`;
+      await setDoc(sub('tasks', id), clean({
+        area: t.area, aula: t.aula, title: t.title, instructions: t.instructions, dueDate: t.dueDate, competencia: t.competencia,
+        ownerUid: t.ownerUid || me.uid, ownerName: t.ownerName || me.fullName, createdAt: t.createdAt || nowIso(),
+      }));
+    },
+
+    async deleteTask(id: string) {
+      const responses = await getDocs(collection(db, 'institutions', iid, 'tasks', id, 'responses'));
+      await commitInChunks(db, responses.docs.map((r) => (b: WriteBatch) => b.delete(r.ref)));
+      await deleteDoc(sub('tasks', id));
+    },
+
+    async listResponses(taskId: string): Promise<TaskResponse[]> {
+      const snap = await getDocs(collection(db, 'institutions', iid, 'tasks', taskId, 'responses'));
+      return snap.docs.map((d) => d.data() as TaskResponse);
+    },
+
+    async reviewResponse(taskId: string, studentId: string, feedback: string, literal: string) {
+      await updateDoc(doc(db, 'institutions', iid, 'tasks', taskId, 'responses', studentId), {
+        feedback, literal, reviewedAt: nowIso(), reviewer: me.fullName,
+      });
+    },
+
+    // ----- Evaluación física (Educación Física) -----
+
+    async listFitness(): Promise<FitnessRecord[]> {
+      const snap = await getDocs(query(col('fitness'), limit(5000)));
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FitnessRecord, 'id'>) })).sort((a, b) => b.date.localeCompare(a.date));
+    },
+
+    async saveFitness(r: Omit<FitnessRecord, 'id' | 'ownerUid' | 'createdAt'>) {
+      const id = `fx_${randomToken()}`;
+      await setDoc(sub('fitness', id), clean({ ...r, ownerUid: me.uid, createdAt: nowIso() }));
+    },
+
+    async deleteFitness(id: string) { await deleteDoc(sub('fitness', id)); },
+  };
+}
+
+// =====================================================================
+// Estudiantes y familias
+// =====================================================================
+
+export type FamilyStore = ReturnType<typeof createFamilyStore>;
+
+export interface InstitutionSummary {
+  name: string;
+  shortName: string;
+  academicYear: string;
+  activePeriod: string;
+  periodType: InstitutionConfig['periodType'];
+  punctualCutoffTime: string;
+}
+
+export function createFamilyStore(me: UserProfile) {
+  const { db } = fb();
+  const iid = me.institutionId;
+
+  return {
+    me,
+    role: me.role as 'estudiante' | 'familia',
+
+    async load(): Promise<{ institution: InstitutionSummary; config: InstitutionConfig; students: Student[] }> {
+      const snap = await getDoc(doc(db, 'institutions', iid));
+      if (!snap.exists()) throw new Error('No encontramos el colegio vinculado a tu cuenta.');
+      const config: InstitutionConfig = { ...DEFAULT_INSTITUTION_CONFIG, ...(snap.data().config || {}) };
+      const students: Student[] = [];
+      for (const sid of me.studentIds || []) {
+        const s = await getDoc(doc(db, 'institutions', iid, 'students', sid));
+        if (s.exists()) students.push(studentFromDoc(s.id, s.data()));
+      }
+      return {
+        config,
+        institution: {
+          name: config.institutionName, shortName: config.shortName, academicYear: config.academicYear,
+          activePeriod: config.activePeriod, periodType: config.periodType, punctualCutoffTime: config.punctualCutoffTime,
+        },
+        students,
+      };
+    },
+
+    async listAttendance(studentId: string): Promise<AttendanceRecord[]> {
+      const snap = await getDocs(query(collection(db, 'institutions', iid, 'attendance'), where('studentId', '==', studentId)));
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AttendanceRecord, 'id'>) })).sort((a, b) => b.day.localeCompare(a.day));
+    },
+
+    async listAnnouncements(): Promise<Announcement[]> {
+      const snap = await getDocs(query(collection(db, 'institutions', iid, 'announcements'), orderBy('createdAt', 'desc'), limit(30)));
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Announcement, 'id'>) }));
+    },
+
+    async listTasks(aula: string): Promise<Task[]> {
+      const snap = await getDocs(query(collection(db, 'institutions', iid, 'tasks'), where('aula', '==', aula)));
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Task, 'id'>) })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async getResponse(taskId: string, studentId: string): Promise<TaskResponse | null> {
+      const snap = await getDoc(doc(db, 'institutions', iid, 'tasks', taskId, 'responses', studentId));
+      return snap.exists() ? (snap.data() as TaskResponse) : null;
+    },
+
+    async submitResponse(taskId: string, student: Student, text: string) {
+      const ref = doc(db, 'institutions', iid, 'tasks', taskId, 'responses', student.id);
+      const cur = await getDoc(ref);
+      if (cur.exists()) await updateDoc(ref, { text, submittedAt: nowIso() });
+      else await setDoc(ref, { studentId: student.id, studentName: student.fullName, text, submittedAt: nowIso() });
+    },
+
+    async listFitness(studentId: string): Promise<FitnessRecord[]> {
+      const snap = await getDocs(query(collection(db, 'institutions', iid, 'fitness'), where('studentId', '==', studentId)));
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FitnessRecord, 'id'>) })).sort((a, b) => b.date.localeCompare(a.date));
     },
   };
 }

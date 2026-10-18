@@ -1,13 +1,13 @@
-import { AlertTriangle, CalendarCheck, Clock, Megaphone, PhoneOff, ScanLine, TrendingDown, UserPlus, Users, UserX } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, ClipboardList, Clock, Compass, Megaphone, NotebookPen, PhoneOff, ScanLine, TrendingDown, UserPlus, Users, UserX } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Avatar, btn, Card, PageHeader, Stat } from './ui';
 import { levelOf } from '../lib/school';
 import { EducationalLevel } from '../types/institution';
-
-const LEVEL_LABEL: Record<EducationalLevel, string> = { inicial: 'Inicial', primaria: 'Primaria', secundaria: 'Secundaria' };
+import { areaInfo, competenciasOf, LEVEL_LABEL } from '../lib/cneb';
 
 export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
-  const { students, todayRecords, config, store } = ctx;
+  const { students, todayRecords, config, me, isDirector } = ctx;
+  const role = me.role;
   const byStudent = new Map(todayRecords.map((r) => [r.studentId, r]));
   const present = todayRecords.filter((r) => r.status === 'Puntual' || r.status === 'Tardanza').length;
   const late = todayRecords.filter((r) => r.status === 'Tardanza').length;
@@ -27,7 +27,7 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
   const noPhone = students.filter((s) => !s.parentPhone).length;
 
   const dateLabel = new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: config.timeZone || 'America/Lima' });
-  const greetName = store.mode === 'demo' ? ctx.profile.name : store.userName;
+  const greetName = me.fullName;
 
   return (
     <div className="space-y-6">
@@ -37,10 +37,43 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
         actions={
           <>
             <button type="button" onClick={() => ctx.go('asistencia')} className={btn.primary}><ScanLine className="w-5 h-5" /> Escanear ingresos</button>
-            {store.role === 'director' && <button type="button" onClick={() => ctx.go('comunicados')} className={btn.secondary}><Megaphone className="w-4 h-4" /> Comunicado</button>}
+            {isDirector && <button type="button" onClick={() => ctx.go('comunicados')} className={btn.secondary}><Megaphone className="w-4 h-4" /> Comunicado</button>}
           </>
         }
       />
+
+      {role === 'docente' && (
+        <Card className="p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-base font-bold text-white">Tus áreas</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Tu panel está armado con las competencias del CNEB de cada área que enseñas.</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" onClick={() => ctx.go('planificacion')} className={btn.secondary}><NotebookPen className="w-4 h-4" /> Planificar</button>
+              <button type="button" onClick={() => ctx.go('actividades')} className={btn.secondary}><ClipboardList className="w-4 h-4" /> Actividades</button>
+            </div>
+          </div>
+          {ctx.myAreas.length === 0 ? (
+            <button type="button" onClick={() => ctx.go('area')} className={`${btn.primary} mt-4`}><Compass className="w-4 h-4" /> Elige tus áreas</button>
+          ) : (
+            <div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {ctx.myAreas.map((a) => {
+                const info = areaInfo(a);
+                const lv = (me.levels?.length ? me.levels : config.activeLevels) as EducationalLevel[];
+                const n = new Set(lv.flatMap((l) => competenciasOf(a, l).map((c) => c.id))).size;
+                return (
+                  <button key={a} type="button" onClick={() => ctx.go('area')} className="text-left p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-orange-500/60 transition cursor-pointer group">
+                    <span className={`block h-1.5 w-12 rounded-full bg-gradient-to-r ${info?.tone || 'from-orange-500 to-amber-400'} group-hover:w-20 transition-all`} />
+                    <span className="mt-3 block font-bold text-white">{a}</span>
+                    <span className="text-xs text-slate-400">{n} competencias · {lv.map((l) => LEVEL_LABEL[l]).join(' y ')}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Stat label="Matrícula" value={students.length} hint="estudiantes registrados" icon={Users} tone="sky" />
@@ -49,7 +82,7 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
         <Stat label="Sin registro hoy" value={pending} hint={avgRate === null ? 'Asistencia acumulada: —' : `Asistencia acumulada: ${avgRate.toFixed(1)}%`} icon={UserX} tone="rose" />
       </div>
 
-      {students.length === 0 && store.role === 'director' && (
+      {students.length === 0 && isDirector && (
         <Card className="p-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between border-orange-500/40">
           <div>
             <h2 className="text-lg font-bold text-white">Empieza registrando a tus estudiantes</h2>
@@ -76,7 +109,7 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
               </div>
             ))}
           </div>
-          {pending > 0 && (store.role === 'director' || store.role === 'auxiliar') && (
+          {pending > 0 && (role === 'director' || role === 'auxiliar') && (
             <button type="button" onClick={() => ctx.go('asistencia')} className={`${btn.ghost} mt-5 -ml-3`}>Ver quién falta registrar →</button>
           )}
         </Card>
@@ -105,7 +138,7 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
                 </div>
               </div>
             ))}
-            {noPhone > 0 && store.role === 'director' && (
+            {noPhone > 0 && isDirector && (
               <button type="button" onClick={() => ctx.go('estudiantes')} className="w-full text-left flex items-center gap-3 cursor-pointer">
                 <span className="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center shrink-0"><PhoneOff className="w-4 h-4" /></span>
                 <span className="text-sm text-slate-300"><strong className="text-white">{noPhone}</strong> alumnos sin celular de apoderado registrado</span>
