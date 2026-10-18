@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { LucideIcon, X } from 'lucide-react';
+import { Particles } from '../lib/motionKit';
 
 export const btn = {
   primary: 'btn-glow h-11 px-4 rounded-xl text-white text-sm font-bold inline-flex items-center justify-center gap-2 cursor-pointer transition active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed',
@@ -25,6 +26,8 @@ export function AppBackdrop() {
         className="absolute inset-0 opacity-[0.07] animate-moving-grid"
         style={{ backgroundImage: 'linear-gradient(rgba(148,163,184,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.5) 1px, transparent 1px)', backgroundSize: '48px 48px', maskImage: 'radial-gradient(ellipse at top, #000 20%, transparent 75%)', WebkitMaskImage: 'radial-gradient(ellipse at top, #000 20%, transparent 75%)' }}
       />
+      <Particles className="opacity-70" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(2,6,23,0.55)_80%,rgba(2,6,23,0.85)_100%)]" />
     </div>
   );
 }

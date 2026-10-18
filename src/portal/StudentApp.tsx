@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Activity, BookOpenCheck, CalendarCheck, CheckCircle2, ClipboardList, Clock, Home, LogOut, Megaphone, Send, TriangleAlert, UserX } from 'lucide-react';
 import { Student } from '../types/education';
@@ -10,6 +10,7 @@ import { aulaOf, CNEB_AREAS, compUnitsOf, findGrade, formatDay, levelOf, LITERAL
 import { AppBackdrop, Badge, btn, Card, Empty, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
 import FullLoader from '../app/FullLoader';
 import Logo from '../app/Logo';
+import { EASE_OUT, ScrollProgressBar, useAutoReveal, useSpotlight } from '../lib/motionKit';
 
 type Tab = 'inicio' | 'notas' | 'asistencia' | 'actividades' | 'comunicados';
 const NAV: { id: Tab; label: string; icon: typeof Home }[] = [
@@ -27,6 +28,9 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
   const [error, setError] = useState('');
   const [sid, setSid] = useState(me.studentIds?.[0] || '');
   const [tab, setTab] = useState<Tab>('inicio');
+  const mainRef = useRef<HTMLElement>(null);
+  useSpotlight();
+  useAutoReveal(mainRef, `${tab}-${sid}-${!!data}`, ':scope > *, :scope > * > *');
 
   const load = useCallback(async () => {
     setError('');
@@ -65,6 +69,7 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
   return (
     <div className="relative isolate min-h-screen text-slate-100 pb-24 lg:pb-10">
       <AppBackdrop />
+      <ScrollProgressBar />
       <header className="sticky top-0 z-30 bg-[#0b1222]/80 backdrop-blur-xl border-b border-slate-800/80">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
           <span className="anim-rise"><Logo className="h-8" light /></span>
@@ -90,8 +95,9 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
       </header>
 
       <AnimatePresence mode="wait" initial={false}>
-      <motion.main key={`${tab}-${student?.id}`} className="max-w-5xl mx-auto px-4 py-6 space-y-6"
-        initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}>
+      <motion.main ref={mainRef} key={`${tab}-${student?.id}`} className="max-w-5xl mx-auto px-4 py-6 space-y-6"
+        initial={{ opacity: 0, y: 26, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -14, transition: { duration: 0.22, ease: 'easeIn' } }} transition={{ duration: 0.55, ease: EASE_OUT }}>
         {profile.role === 'familia' && data.students.length > 1 && (
           <div className="flex gap-2 overflow-x-auto no-scrollbar items-center">
             {data.students.map((s) => (

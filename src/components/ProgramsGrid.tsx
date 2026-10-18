@@ -88,7 +88,7 @@ export default function ProgramsGrid({ onScrollToSimulator, onOpenDemoModal, onS
                   onScrollToSimulator();
                 }
               }}
-              className="group rounded-2xl bg-slate-50 border border-slate-200/90 overflow-hidden flex flex-col justify-between hover:shadow-xl hover:border-orange-300 transition-all cursor-pointer scroll-mt-28"
+              className="spotlight group rounded-2xl bg-slate-50 border border-slate-200/90 overflow-hidden flex flex-col justify-between hover:shadow-xl hover:border-orange-300 transition-all cursor-pointer scroll-mt-28"
             >
               <div>
                 {/* Card Image */}

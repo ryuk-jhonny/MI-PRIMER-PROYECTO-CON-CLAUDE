@@ -53,7 +53,7 @@ export default function HowQrWorks() {
             return (
               <div
                 key={item.step}
-                className="relative p-6 rounded-2xl bg-slate-50 border border-slate-200/90 flex flex-col justify-between hover:border-blue-400 transition-colors group"
+                className="spotlight p-6 rounded-2xl bg-slate-50 border border-slate-200/90 flex flex-col justify-between hover:border-blue-400 transition-colors group"
               >
                 <div>
                   <div className="flex items-center justify-between mb-5">

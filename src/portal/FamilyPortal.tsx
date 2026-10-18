@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, BookOpenCheck, CalendarCheck, Clock, KeyRound, Loader2, Megaphone, ShieldAlert, UserX } from 'lucide-react';
 import { Student, StudentCourseGrade } from '../types/education';
 import { doc, getDoc } from 'firebase/firestore';
@@ -6,6 +6,7 @@ import { cloudEnabled, fb } from '../lib/firebase';
 import { LogoMark } from '../app/Logo';
 import { formatDay, levelOf } from '../lib/school';
 import { navigate } from '../lib/router';
+import { ScrollProgressBar, useAutoReveal, useSpotlight } from '../lib/motionKit';
 
 interface PortalData {
   student: Pick<Student, 'fullName' | 'gradeLevel' | 'section' | 'avatarUrl' | 'grades'>;
@@ -54,6 +55,9 @@ const LIT: Record<string, string> = { AD: 'bg-emerald-100 text-emerald-800', A: 
 
 export default function FamilyPortal({ token }: { token: string }) {
   const [data, setData] = useState<PortalData | null | undefined>(undefined);
+  const mainRef = useRef<HTMLElement>(null);
+  useSpotlight();
+  useAutoReveal(mainRef, data);
 
   useEffect(() => {
     document.title = 'Reporte del estudiante · Ryuk';
@@ -88,6 +92,7 @@ export default function FamilyPortal({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
+      <ScrollProgressBar />
       <header className="relative overflow-hidden bg-[#0f172a] text-white">
         <div aria-hidden="true" className="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-orange-500/25 blur-3xl animate-orbit-1" />
         <div aria-hidden="true" className="absolute -bottom-24 -left-16 w-64 h-64 rounded-full bg-indigo-500/20 blur-3xl animate-orbit-2" />
@@ -106,8 +111,8 @@ export default function FamilyPortal({ token }: { token: string }) {
         </div>
       </header>
 
-      <main className="relative max-w-xl mx-auto px-4 -mt-10 pb-10 space-y-4 stagger">
-        <section className="bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
+      <main ref={mainRef} className="relative max-w-xl mx-auto px-4 -mt-10 pb-10 space-y-4 stagger">
+        <section className="spotlight bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Asistencia</p>
           <div className="mt-2 flex items-end justify-between gap-4">
             <p className="text-4xl font-bold tabular-nums">{rate === null ? '—' : `${rate}%`}</p>
@@ -140,7 +145,7 @@ export default function FamilyPortal({ token }: { token: string }) {
           )}
         </section>
 
-        <section className="bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
+        <section className="spotlight bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><BookOpenCheck className="w-4 h-4" /> Calificaciones</p>
           {grades.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">Aún no hay calificaciones publicadas.</p>
@@ -171,7 +176,7 @@ export default function FamilyPortal({ token }: { token: string }) {
         </section>
 
         {data.announcements.length > 0 && (
-          <section className="bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
+          <section className="spotlight bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><Megaphone className="w-4 h-4" /> Comunicados del colegio</p>
             <ul className="mt-3 space-y-3">
               {data.announcements.map((a, i) => (

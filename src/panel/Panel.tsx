@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity, BookOpenCheck, CheckCircle2, ClipboardList, Compass, GraduationCap, Home, LogOut, Megaphone, Menu, NotebookPen, ScanLine, Settings, TriangleAlert, Users, X,
@@ -24,6 +24,7 @@ import PlanningTab from './PlanningTab';
 import TasksTab from './TasksTab';
 import FitnessTab from './FitnessTab';
 import { AppBackdrop } from './ui';
+import { EASE_OUT, ScrollProgressBar, useAutoReveal, useSpotlight } from '../lib/motionKit';
 
 export type Tab = 'inicio' | 'asistencia' | 'estudiantes' | 'notas' | 'area' | 'planificacion' | 'actividades' | 'fisica' | 'equipo' | 'comunicados' | 'configuracion';
 
@@ -81,6 +82,7 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
 
   const role = me.role as StaffRole;
   const isDirector = role === 'director';
@@ -229,6 +231,9 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
       </div>
     );
   }
+  useSpotlight();
+  useAutoReveal(mainRef, `${tab}-${!!ctx}`, ':scope > * > *');
+
   if (!ctx) return <FullLoader label="Cargando tu colegio…" />;
 
   const current = allowed.find((n) => n.id === tab) || allowed[0];
@@ -276,6 +281,7 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
   return (
     <div className="relative isolate min-h-screen text-slate-100 lg:pl-64">
       <AppBackdrop />
+      <ScrollProgressBar />
       <aside className="hidden lg:flex fixed inset-y-0 left-0 z-20 w-64 flex-col gap-6 p-4 bg-[#0b1222]/85 backdrop-blur-xl border-r border-slate-800/80">
         <button type="button" onClick={() => go('inicio')} className="px-2 pt-2 text-left cursor-pointer transition-transform hover:scale-[1.03] origin-left"><Logo className="h-8" light /></button>
         <div className="px-3 anim-rise">
@@ -316,8 +322,9 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
       </AnimatePresence>
 
       <AnimatePresence mode="wait" initial={false}>
-      <motion.main key={current.id} className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-10"
-        initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}>
+      <motion.main ref={mainRef} key={current.id} className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-10"
+        initial={{ opacity: 0, y: 26, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -14, transition: { duration: 0.22, ease: 'easeIn' } }} transition={{ duration: 0.55, ease: EASE_OUT }}>
         {current.id === 'inicio' && <HomeTab ctx={ctx} />}
         {current.id === 'area' && <AreaTab ctx={ctx} />}
         {current.id === 'asistencia' && <AttendanceTab ctx={ctx} />}

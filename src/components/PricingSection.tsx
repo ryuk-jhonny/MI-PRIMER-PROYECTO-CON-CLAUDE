@@ -25,7 +25,7 @@ export default function PricingSection({ onSelectPlan }: PricingProps) {
           {INSTITUTION_PLANS.map((plan) => (
             <div
               key={plan.id}
-              className={`rounded-3xl p-7 flex flex-col justify-between transition-all relative ${
+              className={`spotlight rounded-3xl p-7 flex flex-col justify-between transition-all relative ${
                 plan.isPopular
                   ? 'bg-white border-2 border-orange-500 shadow-xl'
                   : 'bg-white border border-slate-200 shadow-xs hover:shadow-md'
