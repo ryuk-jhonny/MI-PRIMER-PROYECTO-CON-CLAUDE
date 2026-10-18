@@ -21,12 +21,17 @@ La app empieza **vacía**. No trae cuentas de prueba ni datos de ejemplo: la pri
 
 > **Usa una cuenta personal de Gmail.** Las cuentas de colegio, de trabajo o del Estado suelen tener bloqueado crear proyectos o activar servicios de Google Cloud. Si tienes varias cuentas de Google abiertas, hazlo en una ventana de incógnito con una sola cuenta. Si aparece un error que empieza con `IamPermissionDeniedException` o *Permission denied to enable service*, mira [Problemas frecuentes](#problemas-frecuentes).
 
-## Paso 2. Activa el inicio de sesión con correo
+## Paso 2. Activa el inicio de sesión
+
+La dirección y los docentes entran con **correo**. Estudiantes y familias entran con el **carnet QR y un PIN**, y Firebase los registra como usuarios **anónimos**. Por eso se activan dos proveedores.
 
 1. En el menú izquierdo entra a **Compilación → Authentication** y pulsa **Comenzar**.
 2. En la pestaña **Método de inicio de sesión** elige **Correo electrónico/contraseña**.
 3. Activa el primer interruptor (**Correo electrónico/contraseña**). El segundo, *vínculo de correo electrónico*, déjalo apagado.
 4. Pulsa **Guardar**.
+5. Pulsa **Agregar proveedor nuevo**, elige **Anónimo**, actívalo y pulsa **Guardar**.
+
+Al cerrar sesión con el carnet, la app borra ese usuario anónimo, así que no se acumulan en la lista de **Usuarios**.
 
 Para que los correos de verificación y de cambio de contraseña lleguen en español, entra a **Authentication → Plantillas**, pulsa el lápiz y en **Idioma de la plantilla** elige **Español**.
 
@@ -127,13 +132,14 @@ Firebase solo permite iniciar sesión desde dominios que conoce.
 3. En **Configuración** completa la UGEL, los códigos modulares, los grados, las secciones y el horario de ingreso.
 4. En **Estudiantes** matricula a cada estudiante, o importa tu nómina desde Excel. Cada estudiante recibe:
    - un **carnet con QR** para la asistencia y el portal de la familia;
-   - un **código de estudiante** para su propia cuenta;
-   - un **código de familia** para la cuenta del padre, madre o apoderado.
+   - un **código de estudiante** para activar su carnet la primera vez;
+   - un **código de familia** para que el padre, madre o apoderado active el mismo carnet como familia.
    Los imprimes con el botón **Códigos de acceso**.
 5. En **Equipo docente** están los códigos de invitación para **docentes** y para el **personal de puerta**. Entrégalos en persona o por WhatsApp. Si un código se filtra, pulsa **Cambiar códigos** y el anterior deja de servir.
 6. Cada docente crea su cuenta, elige **Unirme con un código** y marca las **áreas del CNEB** que enseña y su nivel. Su panel se arma con las competencias de esas áreas. Quien enseña Educación Física ve además la **Evaluación física**.
-7. Estudiantes y familias hacen lo mismo con su código. Una familia con varios hijos usa una sola cuenta y agrega a cada hijo con **Vincular otro hijo(a)**.
-8. **Ingreso con el carnet (sin correo).** Estudiantes y familias también pueden entrar escaneando el QR del carnet y escribiendo un **PIN de 6 números**. Al escanear el carnet se abre su ficha; ahí pulsan **Entrar con mi PIN**. También pueden pulsar **Entrar con mi carnet QR** en la pantalla de ingreso. La primera vez eligen **Activar mi carnet**, escriben su código de estudiante o de familia y crean su PIN. Si alguien olvida el PIN o pierde el carnet, ve a **Editar estudiante** y pulsa **Generar QR nuevo**: el carnet anterior y su PIN dejan de funcionar, y se activa el carnet nuevo.
+7. **Estudiantes y familias no usan correo.** Al escanear el carnet se abre su ficha pública (asistencia y comunicados). Para entrar a la plataforma completa pulsan **Entrar con mi PIN**, eligen **Soy el estudiante** o **Soy la familia** y escriben su **PIN de 6 números**. También pueden pulsar **Entrar con mi carnet QR** en la pantalla de ingreso.
+8. **La primera vez** eligen **Activar mi carnet**, escriben su código de estudiante o de familia y crean su PIN. El estudiante y la familia tienen PIN distintos. Una familia con varios hijos entra con el carnet de cada hijo.
+9. Si alguien olvida el PIN o pierde el carnet, ve a **Editar estudiante** y pulsa **Generar QR nuevo**: el carnet anterior y sus PIN dejan de funcionar, y se activa el carnet nuevo.
 
 ## Paso 10 (opcional). Probar sin tocar tu proyecto real
 
@@ -166,6 +172,8 @@ La primera vez, `npm run test:e2e` puede pedirte instalar el navegador: `npx pla
 | `IamPermissionDeniedException: Permission denied to enable service [cloudresourcemanager.googleapis.com]` al crear el proyecto | La cuenta con la que entraste no puede activar servicios en ese proyecto. 1) Abre una ventana de incógnito, entra solo con tu Gmail personal y crea un proyecto **nuevo** (no elijas un proyecto de Google Cloud que ya existía). 2) Si el proyecto ya se creó, entra a <https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com>, elige tu proyecto arriba y pulsa **Habilitar**; luego vuelve a la consola de Firebase. 3) Si tampoco te deja, revisa en <https://console.cloud.google.com/iam-admin/iam> que tu cuenta tenga el rol **Propietario**. Si la cuenta es de una organización (colegio o empresa), pide ese rol a su administrador o usa tu Gmail personal. |
 | **Falta conectar la base de datos** | Faltan variables en `.env.local` o en Vercel. Revisa los seis valores y vuelve a desplegar. |
 | **El inicio con correo no está activado en Firebase** | Repite el Paso 2. |
+| «Este carnet ya está activado» | Ya se eligió un PIN para ese carnet. Ingresa con el PIN; si nadie lo recuerda, la dirección genera un QR nuevo. |
+| «El ingreso con carnet no está activado en Firebase» | Falta activar el proveedor **Anónimo** (Paso 2, punto 5). |
 | «Este carnet ya no está vigente» | La dirección generó un QR nuevo para ese estudiante. Escanea el carnet nuevo y actívalo otra vez con tu código. |
 | **No tienes permiso para hacer esto** | Publica las reglas (Paso 5). Si te acaban de cambiar de rol, cierra sesión y vuelve a entrar. |
 | `auth/unauthorized-domain` o no puedes iniciar sesión desde Vercel | Agrega el dominio en el Paso 8. |

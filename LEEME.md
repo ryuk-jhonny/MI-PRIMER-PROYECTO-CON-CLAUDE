@@ -8,9 +8,9 @@ App web para colegios de **primaria y secundaria** del Perú, basada en el **Cur
 | **Docentes de cada área** | Eligen sus áreas del CNEB, su nivel y, si quieren, sus aulas. Su panel se arma con las competencias y capacidades de sus áreas: notas por competencia, planificación de unidades y sesiones con lista de cotejo, actividades con retroalimentación y comunicados. Quien enseña **Educación Física** tiene además la evaluación física (peso, talla, IMC y pruebas). |
 | **Personal de puerta (auxiliar)** | Registra ingresos con el escáner QR y corrige estados de asistencia. |
 | **Estudiantes** | Ven sus notas por competencia, su asistencia, las actividades de sus docentes (y las responden desde el celular) y los comunicados. |
-| **Familias** | Lo mismo que el estudiante, para cada hijo o hija vinculado a la misma cuenta. Sin cuenta, también pueden escanear el QR del carnet y ver la asistencia y los comunicados. |
+| **Familias** | Lo mismo que el estudiante, para su hijo o hija. Sin cuenta, también pueden escanear el QR del carnet y ver la asistencia y los comunicados. |
 
-Estudiantes y familias pueden entrar con su correo, o **con el carnet QR y un PIN de 6 números**. Un QR nuevo anula el carnet anterior y su PIN.
+Solo la dirección y el personal entran con correo. Estudiantes y familias entran **con el carnet QR y un PIN de 6 números** (en Firebase quedan como usuarios anónimos, que se borran al cerrar sesión). Un QR nuevo anula el carnet anterior y sus PIN.
 
 La app **empieza vacía**: no trae cuentas de prueba ni datos de ejemplo. La primera cuenta que registres será la dirección de tu colegio.
 
@@ -70,8 +70,8 @@ npm run dev:local      # terminal 2: la app conectada a los emuladores
 |---|---|
 | `npm run lint` | Tipos de TypeScript |
 | `npm test` | Promedios CNEB, periodos, códigos, horarios e importación de nóminas |
-| `npm run test:reglas` | 47 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, un auxiliar no pone notas, nadie lista los códigos, el portal no se puede modificar sin sesión, etc. |
-| `npm run test:e2e` | Recorre la app en Chromium: la dirección registra su colegio y matricula; una docente de Matemática se une y califica; la familia y el estudiante se unen y ven las notas; el portal del carnet se abre sin cuenta; todo revisado también en pantalla de celular |
+| `npm run test:reglas` | 52 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, el carnet no entra con un PIN equivocado ni se activa dos veces, un auxiliar no pone notas, nadie lista los códigos, el portal no se puede modificar sin sesión, etc. |
+| `npm run test:e2e` | Recorre la app en Chromium: la dirección registra su colegio y matricula; una docente de Matemática se une y califica; la familia y el estudiante activan su carnet, entran con su PIN y ven las notas; el portal del carnet se abre sin cuenta; todo revisado también en pantalla de celular |
 | `npm run test:todo` | Todo lo anterior |
 
 ## 3. Publicar

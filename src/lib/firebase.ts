@@ -45,6 +45,7 @@ export function friendlyError(err: unknown): string {
     'auth/too-many-requests': 'Demasiados intentos. Espera un minuto y vuelve a intentar.',
     'auth/network-request-failed': 'Sin conexión a internet. Revisa tu red e inténtalo otra vez.',
     'auth/operation-not-allowed': 'El inicio con correo no está activado en Firebase (Authentication → Sign-in method).',
+    'auth/admin-restricted-operation': 'El ingreso con carnet no está activado en Firebase: activa el proveedor Anónimo (Authentication → Método de inicio de sesión).',
     'auth/invalid-api-key': 'La clave de Firebase (VITE_FIREBASE_API_KEY) no es válida. Revísala en las variables de Vercel y vuelve a desplegar.',
     'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'La clave de Firebase (VITE_FIREBASE_API_KEY) no es válida. Revísala en las variables de Vercel y vuelve a desplegar.',
     'auth/unauthorized-domain': 'Este dominio no está autorizado en Firebase (Authentication → Configuración → Dominios autorizados).',

@@ -2,8 +2,8 @@ import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Building2, CheckCircle2, GraduationCap, HeartHandshake, IdCard, KeyRound, Loader2, LogIn, Mail, QrCode, ShieldCheck, UserPlus } from 'lucide-react';
 import {
-  activateCarnet, CarnetWho, carnetActivationDone, checkCode, createInstitution, isPin, joinWithCode, loadProfile, login, loginWithCarnet, logout,
-  resetPassword, signup, takeCarnetFailure, User, watchAuth,
+  activateCarnet, CarnetWho, clearCarnetFailure, peekCarnetFailure, carnetActivationDone, checkCode, createInstitution, isPin, joinWithCode, loadProfile, login, loginWithCarnet, logoutAndForget,
+  resetPassword, signup, User, watchAuth, CARNET_ONLY,
 } from '../lib/accounts';
 import { fb, friendlyError } from '../lib/firebase';
 import { ROLE_LABEL, tokenFromQr, UserProfile } from '../lib/store';
@@ -18,6 +18,8 @@ export default function AuthGate({ children }: { children: (me: UserProfile, onL
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [profile, setProfile] = useState<UserProfile | null | undefined>(undefined);
   const [error, setError] = useState('');
+  // De qué cuenta es el perfil cargado (null si aún no se cargó ninguno).
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
   useEffect(() => watchAuth(setUser), []);
 
@@ -29,17 +31,24 @@ export default function AuthGate({ children }: { children: (me: UserProfile, onL
       if (fb().auth.currentUser?.uid !== u.uid) return;
       setProfile(await loadProfile(u.uid));
     } catch (err) { setError(friendlyError(err)); setProfile(null); }
+    setLoadedFor(u.uid);
   }, []);
 
   useEffect(() => {
     if (user) { setProfile(undefined); refresh(user); } else setProfile(null);
   }, [user, refresh]);
 
-  const out = async () => { await logout(); setProfile(null); };
+  const out = async () => { await logoutAndForget(); setProfile(null); };
+
+  // Una sesión de carnet sin perfil no sirve (un intento que no terminó): se descarta.
+  useEffect(() => {
+    if (user?.isAnonymous && profile === null && loadedFor === user.uid) logoutAndForget();
+  }, [user, profile, loadedFor]);
 
   if (user === undefined || (user && profile === undefined)) return <FullLoader />;
   if (!user) return <LoginScreen />;
   if (!profile) {
+    if (user.isAnonymous) return <FullLoader />;
     return <SetupScreen email={user.email || ''} loadError={error} onLogout={out} onReady={(p) => setProfile(p)} />;
   }
   return <>{children(profile, out)}</>;
@@ -111,11 +120,12 @@ function Alert({ kind, children }: { kind: 'error' | 'ok'; children: ReactNode }
 const carnetFromHash = () => window.location.hash.match(/^#carnet=([a-f0-9]{16,64})$/i)?.[1].toLowerCase() || null;
 
 function LoginScreen() {
-  const [failure] = useState(takeCarnetFailure);
+  const [failure] = useState(peekCarnetFailure);
+  useEffect(() => clearCarnetFailure(), []);
   // undefined: ingreso con correo · null: carnet sin escanear · texto: token del carnet
   const [carnet, setCarnet] = useState<string | null | undefined>(() => failure?.token || carnetFromHash() || undefined);
   if (carnet !== undefined) {
-    return <CarnetScreen token={carnet} initialWho={failure?.who} initialError={failure?.error} onToken={setCarnet} onBack={() => { setCarnet(undefined); if (carnetFromHash()) window.history.replaceState({}, '', '/app'); }} />;
+    return <CarnetScreen token={carnet} initialWho={failure?.who} initialMode={failure?.mode} initialError={failure?.error} onToken={setCarnet} onBack={() => { setCarnet(undefined); if (carnetFromHash()) window.history.replaceState({}, '', '/app'); }} />;
   }
   return <EmailLogin onCarnet={() => setCarnet(null)} />;
 }
@@ -150,7 +160,7 @@ function EmailLogin({ onCarnet }: { onCarnet: () => void }) {
             {mode === 'login' ? 'Ingresa a tu colegio' : mode === 'signup' ? 'Crea tu cuenta' : 'Recupera tu contraseña'}
           </h1>
           <p className="text-sm text-slate-600">
-            {mode === 'login' ? 'Dirección, docentes, estudiantes y familias.' : mode === 'signup' ? 'Después registras tu colegio o te unes con el código que te dio la dirección.' : 'Te enviaremos un enlace a tu correo.'}
+            {mode === 'login' ? 'Dirección, docentes y personal del colegio.' : mode === 'signup' ? 'Después registras tu colegio o te unes con el código que te dio la dirección.' : 'Te enviaremos un enlace a tu correo.'}
           </p>
         </div>
 
@@ -198,7 +208,7 @@ function EmailLogin({ onCarnet }: { onCarnet: () => void }) {
           <button type="button" onClick={onCarnet}
             className="lift group w-full p-4 rounded-2xl border-2 border-dashed border-orange-300 hover:border-orange-600 bg-orange-50/60 flex items-center gap-3 text-left cursor-pointer">
             <span className="w-11 h-11 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6"><QrCode className="w-6 h-6" /></span>
-            <span><strong className="block text-slate-900">Entrar con mi carnet QR</strong><span className="text-sm text-slate-600">Estudiantes y familias: escanea el QR y escribe tu PIN.</span></span>
+            <span><strong className="block text-slate-900">Entrar con mi carnet QR</strong><span className="text-sm text-slate-600">Estudiantes y familias entran solo con su carnet: escanean el QR y escriben su PIN.</span></span>
           </button>
         )}
 
@@ -211,15 +221,14 @@ function EmailLogin({ onCarnet }: { onCarnet: () => void }) {
   );
 }
 
-function CarnetScreen({ token, initialWho, initialError, onToken, onBack }: {
-  token: string | null; initialWho?: CarnetWho; initialError?: string; onToken: (t: string | null) => void; onBack: () => void;
+function CarnetScreen({ token, initialWho, initialMode, initialError, onToken, onBack }: {
+  token: string | null; initialWho?: CarnetWho; initialMode?: 'pin' | 'activate'; initialError?: string; onToken: (t: string | null) => void; onBack: () => void;
 }) {
   const [who, setWho] = useState<CarnetWho>(initialWho || 'estudiante');
-  const [mode, setMode] = useState<'pin' | 'activate'>(initialError ? 'activate' : 'pin');
+  const [mode, setMode] = useState<'pin' | 'activate'>(initialMode || 'pin');
   const [pin, setPin] = useState('');
   const [pin2, setPin2] = useState('');
   const [code, setCode] = useState('');
-  const [fullName, setFullName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError || '');
 
@@ -237,7 +246,7 @@ function CarnetScreen({ token, initialWho, initialError, onToken, onBack }: {
     setBusy(true);
     try {
       if (mode === 'pin') await loginWithCarnet(token, who, pin);
-      else await activateCarnet(token, who, { code, fullName, pin });
+      else await activateCarnet(token, who, { code, pin });
     } catch (err) {
       setError(friendlyError(err));
       setBusy(false);
@@ -291,10 +300,6 @@ function CarnetScreen({ token, initialWho, initialError, onToken, onBack }: {
                   <div>
                     <label htmlFor="cc" className={labelCls}>{who === 'estudiante' ? 'Código de estudiante' : 'Código de familia'}</label>
                     <input id="cc" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className={`${inputCls} font-mono tracking-widest uppercase`} autoComplete="off" placeholder="Lo entrega la dirección" />
-                  </div>
-                  <div>
-                    <label htmlFor="cn" className={labelCls}>{who === 'estudiante' ? 'Tu nombre completo' : 'Nombre del padre, madre o apoderado(a)'}</label>
-                    <input id="cn" required minLength={2} value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} autoComplete="name" />
                   </div>
                 </>
               )}
@@ -352,7 +357,14 @@ function SetupScreen({ email, loadError, onReady, onLogout }: { email: string; l
     run(async () => onReady(await createInstitution({ fullName, schoolName, shortName, levels, periodType })));
   };
 
-  const verify = (e: FormEvent) => { e.preventDefault(); run(async () => setChecked(await checkCode(code))); };
+  const verify = (e: FormEvent) => {
+    e.preventDefault();
+    run(async () => {
+      const info = await checkCode(code);
+      if (info.kind === 'link') throw new Error(CARNET_ONLY);
+      setChecked(info);
+    });
+  };
 
   const join = (e: FormEvent) => {
     e.preventDefault();
@@ -377,7 +389,7 @@ function SetupScreen({ email, loadError, onReady, onLogout }: { email: string; l
           </button>
           <button type="button" onClick={() => setMode('join')} className="lift group w-full text-left p-5 rounded-2xl border-2 border-slate-200 hover:border-orange-600 hover:shadow-lg hover:shadow-orange-600/10 flex gap-4 cursor-pointer">
             <KeyRound className="w-7 h-7 text-orange-700 shrink-0 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6" />
-            <span><strong className="block">Unirme con un código</strong><span className="text-sm text-slate-600">Soy docente, personal de puerta, estudiante o familia y el colegio me dio un código.</span></span>
+            <span><strong className="block">Unirme con un código</strong><span className="text-sm text-slate-600">Soy docente o personal de puerta y el colegio me dio un código.</span></span>
           </button>
           <button type="button" onClick={onLogout} className="w-full text-sm text-slate-500 hover:text-slate-800 min-h-11 cursor-pointer">Cerrar sesión</button>
         </div>
@@ -431,7 +443,7 @@ function SetupScreen({ email, loadError, onReady, onLogout }: { email: string; l
       {mode === 'join' && !checked && (
         <form onSubmit={verify} className="space-y-4">
           <h1 className="text-2xl font-bold">Únete a tu colegio</h1>
-          <p className="text-sm text-slate-600">La dirección entrega un código a cada docente y al personal de puerta. Estudiantes y familias encuentran el suyo en la ficha que entrega el colegio.</p>
+          <p className="text-sm text-slate-600">La dirección entrega un código a cada docente y al personal de puerta. Estudiantes y familias no usan correo: entran con su carnet QR y su PIN.</p>
           <div>
             <label htmlFor="jc" className={labelCls}>Código</label>
             <input id="jc" required value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className={`${inputCls} font-mono tracking-widest uppercase`} placeholder="Ej.: K7MQ2PXA" maxLength={14} autoComplete="off" />
@@ -454,7 +466,7 @@ function SetupScreen({ email, loadError, onReady, onLogout }: { email: string; l
             </div>
           </div>
           <div>
-            <label htmlFor="jn" className={labelCls}>{checked.role === 'familia' ? 'Nombre del padre, madre o apoderado(a)' : 'Tu nombre completo'}</label>
+            <label htmlFor="jn" className={labelCls}>Tu nombre completo</label>
             <input id="jn" required minLength={2} value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} autoComplete="name" />
           </div>
 
@@ -486,10 +498,6 @@ function SetupScreen({ email, loadError, onReady, onLogout }: { email: string; l
                 <p className="mt-2 text-xs text-slate-500">Tu panel se arma con las competencias, capacidades y herramientas de tus áreas. Puedes cambiarlo después.</p>
               </fieldset>
             </>
-          )}
-
-          {(checked.role === 'estudiante' || checked.role === 'familia') && (
-            <p className="text-sm text-slate-600 flex items-start gap-2"><HeartHandshake className="w-5 h-5 text-orange-700 shrink-0" /> Verás las notas por competencia, la asistencia, las actividades y los comunicados del colegio.</p>
           )}
 
           {error && <Alert kind="error">{error}</Alert>}

@@ -1,14 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Activity, BookOpenCheck, CalendarCheck, CheckCircle2, ClipboardList, Clock, Home, LogOut, Megaphone, Plus, Send, TriangleAlert, UserX } from 'lucide-react';
+import { Activity, BookOpenCheck, CalendarCheck, CheckCircle2, ClipboardList, Clock, Home, LogOut, Megaphone, Send, TriangleAlert, UserX } from 'lucide-react';
 import { Student } from '../types/education';
 import { InstitutionConfig } from '../types/institution';
 import { Announcement, AttendanceRecord, createFamilyStore, FitnessRecord, ROLE_LABEL, Task, TaskResponse, UserProfile } from '../lib/store';
 import { friendlyError } from '../lib/firebase';
-import { linkAnotherChild } from '../lib/accounts';
 import { competenciasOf, COMPETENCIAS } from '../lib/cneb';
 import { aulaOf, CNEB_AREAS, compUnitsOf, findGrade, formatDay, levelOf, LITERAL_STYLE, periodCount, periodLabel, statusOf, unitsOf, overallLiteral } from '../lib/school';
-import { AppBackdrop, Badge, btn, Card, Empty, input, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
+import { AppBackdrop, Badge, btn, Card, Empty, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
 import FullLoader from '../app/FullLoader';
 import Logo from '../app/Logo';
 
@@ -22,13 +21,12 @@ const NAV: { id: Tab; label: string; icon: typeof Home }[] = [
 ];
 
 export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout: () => void }) {
-  const [profile, setProfile] = useState(me);
+  const [profile] = useState(me);
   const store = useMemo(() => createFamilyStore(profile), [profile]);
   const [data, setData] = useState<Awaited<ReturnType<typeof store.load>> | null>(null);
   const [error, setError] = useState('');
   const [sid, setSid] = useState(me.studentIds?.[0] || '');
   const [tab, setTab] = useState<Tab>('inicio');
-  const [linking, setLinking] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -72,7 +70,7 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
           <span className="anim-rise"><Logo className="h-8" light /></span>
           <div className="flex items-center gap-2 min-w-0 anim-rise">
             <div className="hidden sm:block text-right min-w-0">
-              <p className="text-sm font-semibold text-white truncate">{profile.fullName}</p>
+              <p className="text-sm font-semibold text-white truncate">{profile.carnetToken && student ? (profile.role === 'familia' ? `Familia de ${student.fullName}` : student.fullName) : profile.fullName}</p>
               <p className="text-[11px] text-slate-400 truncate">{ROLE_LABEL[profile.role]} · {data.institution.shortName || data.institution.name}</p>
             </div>
             <button type="button" onClick={onLogout} aria-label="Cerrar sesión" className="w-11 h-11 rounded-xl flex items-center justify-center text-slate-300 hover:bg-rose-500/10 hover:text-rose-200 transition-colors cursor-pointer"><LogOut className="w-5 h-5" /></button>
@@ -94,7 +92,7 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
       <AnimatePresence mode="wait" initial={false}>
       <motion.main key={`${tab}-${student?.id}`} className="max-w-5xl mx-auto px-4 py-6 space-y-6"
         initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}>
-        {profile.role === 'familia' && (
+        {profile.role === 'familia' && data.students.length > 1 && (
           <div className="flex gap-2 overflow-x-auto no-scrollbar items-center">
             {data.students.map((s) => (
               <button key={s.id} type="button" aria-pressed={s.id === student?.id} onClick={() => setSid(s.id)}
@@ -102,7 +100,6 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
                 {s.fullName.split(' ').slice(0, 2).join(' ')}
               </button>
             ))}
-            {!profile.carnetToken && <button type="button" onClick={() => setLinking(true)} className={`${btn.ghost} whitespace-nowrap`}><Plus className="w-4 h-4" /> Vincular otro hijo(a)</button>}
           </div>
         )}
 
@@ -130,7 +127,6 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
         ))}
       </nav>
 
-      {linking && <LinkChild me={profile} onClose={() => setLinking(false)} onLinked={(id) => { setProfile((p) => ({ ...p, studentIds: [...(p.studentIds || []), id] })); setSid(id); setLinking(false); }} />}
     </div>
   );
 }
@@ -326,27 +322,5 @@ function Announcements({ store, student }: { store: FStore; student: Student }) 
         </Card>
       ))}
     </div>
-  );
-}
-
-function LinkChild({ me, onClose, onLinked }: { me: UserProfile; onClose: () => void; onLinked: (id: string) => void }) {
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setError('');
-    try { onLinked(await linkAnotherChild(me, code)); } catch (err) { setError(friendlyError(err)); }
-    setBusy(false);
-  };
-  return (
-    <Modal title="Vincular otro hijo o hija" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3">
-        <p className="text-sm text-slate-300">Escribe el código de familia que figura en su ficha de acceso.</p>
-        <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} required className={`${input} font-mono tracking-widest`} placeholder="Código de familia" aria-label="Código de familia" />
-        {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
-        <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className={btn.ghost}>Cancelar</button><button type="submit" disabled={busy} className={btn.primary}>Vincular</button></div>
-      </form>
-    </Modal>
   );
 }
