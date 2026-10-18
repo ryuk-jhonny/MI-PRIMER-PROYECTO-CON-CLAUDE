@@ -32,7 +32,7 @@ export default function TasksTab({ ctx }: { ctx: PanelCtx }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title="Actividades"
         subtitle="Publica retos y tareas para un aula. Estudiantes y familias los ven en su cuenta y responden desde el celular."

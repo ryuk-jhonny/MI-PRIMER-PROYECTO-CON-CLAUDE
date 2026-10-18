@@ -75,7 +75,7 @@ export default function GradesTab({ ctx }: { ctx: PanelCtx }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title="Notas por competencia"
         subtitle={`Escala CNEB (AD, A, B, C) · ${config.periodType === 'trimestral' ? '3 trimestres' : '4 bimestres'} · Periodo actual: ${config.activePeriod}`}

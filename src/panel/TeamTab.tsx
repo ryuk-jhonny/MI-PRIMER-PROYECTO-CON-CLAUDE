@@ -46,7 +46,7 @@ export default function TeamTab({ ctx }: { ctx: PanelCtx }) {
   }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader title="Equipo docente" subtitle="Cada docente entra con su cuenta y trabaja con las competencias de sus propias áreas." />
 
       <Card className="p-5 sm:p-6 space-y-4">

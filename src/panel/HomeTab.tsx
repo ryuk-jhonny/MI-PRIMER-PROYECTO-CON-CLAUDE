@@ -30,7 +30,7 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
   const greetName = me.fullName;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title={`Hola, ${greetName.split(' ').slice(0, 2).join(' ') || 'bienvenido(a)'}`}
         subtitle={`${dateLabel.charAt(0).toUpperCase()}${dateLabel.slice(1)} · Ingreso puntual hasta las ${config.punctualCutoffTime}`}
@@ -104,7 +104,7 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
                   <span className="text-slate-400 tabular-nums"><strong className="text-white">{r.here}</strong> / {r.total} · {r.pct}%</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-slate-800 overflow-hidden" role="progressbar" aria-valuenow={r.pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Asistencia ${LEVEL_LABEL[r.lv]}`}>
-                  <div className="h-full rounded-full bg-gradient-to-r from-orange-600 to-amber-400 transition-[width] duration-700" style={{ width: `${r.pct}%` }} />
+                  <div className="bar-fill h-full rounded-full bg-gradient-to-r from-orange-600 to-amber-400 transition-[width] duration-700" style={{ width: `${r.pct}%` }} />
                 </div>
               </div>
             ))}

@@ -30,7 +30,7 @@ export default function FitnessTab({ ctx }: { ctx: PanelCtx }) {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title="Evaluación física"
         subtitle="Peso, talla, IMC y pruebas de condición física. Sirve de evidencia para la competencia “Asume una vida saludable”."

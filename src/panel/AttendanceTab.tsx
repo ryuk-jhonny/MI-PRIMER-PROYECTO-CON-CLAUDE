@@ -75,7 +75,7 @@ export default function AttendanceTab({ ctx }: { ctx: PanelCtx }) {
   const lastLink = lastStudent && last?.status ? waLink(lastStudent.parentPhone, notifyText(lastStudent.fullName, last.status, last.time)) : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title="Asistencia con QR"
         subtitle={`Hoy · puntual hasta las ${config.punctualCutoffTime}. Después se registra como tardanza.`}

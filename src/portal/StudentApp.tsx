@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Activity, BookOpenCheck, CalendarCheck, CheckCircle2, ClipboardList, Clock, Home, LogOut, Megaphone, Plus, Send, TriangleAlert, UserX } from 'lucide-react';
 import { Student } from '../types/education';
 import { InstitutionConfig } from '../types/institution';
@@ -7,7 +8,7 @@ import { friendlyError } from '../lib/firebase';
 import { linkAnotherChild } from '../lib/accounts';
 import { competenciasOf, COMPETENCIAS } from '../lib/cneb';
 import { aulaOf, CNEB_AREAS, compUnitsOf, findGrade, formatDay, levelOf, LITERAL_STYLE, periodCount, periodLabel, statusOf, unitsOf, overallLiteral } from '../lib/school';
-import { Badge, btn, Card, Empty, input, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
+import { AppBackdrop, Badge, btn, Card, Empty, input, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
 import FullLoader from '../app/FullLoader';
 import Logo from '../app/Logo';
 
@@ -56,36 +57,40 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
   const go = (t: Tab) => { setTab(t); window.scrollTo({ top: 0 }); };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 lg:pb-10">
-      <header className="sticky top-0 z-30 bg-[#0b1222]/95 backdrop-blur border-b border-slate-800">
+    <div className="relative isolate min-h-screen text-slate-100 pb-24 lg:pb-10">
+      <AppBackdrop />
+      <header className="sticky top-0 z-30 bg-[#0b1222]/80 backdrop-blur-xl border-b border-slate-800/80">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
-          <Logo className="h-8" light />
-          <div className="flex items-center gap-2 min-w-0">
+          <span className="anim-rise"><Logo className="h-8" light /></span>
+          <div className="flex items-center gap-2 min-w-0 anim-rise">
             <div className="hidden sm:block text-right min-w-0">
               <p className="text-sm font-semibold text-white truncate">{profile.fullName}</p>
               <p className="text-[11px] text-slate-400 truncate">{ROLE_LABEL[profile.role]} · {data.institution.shortName || data.institution.name}</p>
             </div>
-            <button type="button" onClick={onLogout} aria-label="Cerrar sesión" className="w-11 h-11 rounded-xl flex items-center justify-center text-slate-300 hover:bg-slate-800 cursor-pointer"><LogOut className="w-5 h-5" /></button>
+            <button type="button" onClick={onLogout} aria-label="Cerrar sesión" className="w-11 h-11 rounded-xl flex items-center justify-center text-slate-300 hover:bg-rose-500/10 hover:text-rose-200 transition-colors cursor-pointer"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
         <nav aria-label="Secciones" className="hidden lg:block max-w-5xl mx-auto px-4">
           <div className="flex gap-1 pb-2">
             {NAV.map((n) => (
               <button key={n.id} type="button" onClick={() => go(n.id)} aria-current={tab === n.id ? 'page' : undefined}
-                className={`h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition ${tab === n.id ? 'bg-orange-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
-                <n.icon className="w-4 h-4" /> {n.label}
+                className={`nav-item relative h-10 px-4 rounded-xl text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition-colors ${tab === n.id ? 'text-white' : 'text-slate-300 hover:bg-slate-800/70'}`}>
+                {tab === n.id && <motion.span layoutId="student-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} className="absolute inset-0 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 shadow-lg shadow-orange-600/30" />}
+                <n.icon className="relative w-4 h-4" /> <span className="relative">{n.label}</span>
               </button>
             ))}
           </div>
         </nav>
       </header>
 
-      <main key={`${tab}-${student?.id}`} className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-fade-up">
+      <AnimatePresence mode="wait" initial={false}>
+      <motion.main key={`${tab}-${student?.id}`} className="max-w-5xl mx-auto px-4 py-6 space-y-6"
+        initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}>
         {profile.role === 'familia' && (
           <div className="flex gap-2 overflow-x-auto no-scrollbar items-center">
             {data.students.map((s) => (
               <button key={s.id} type="button" aria-pressed={s.id === student?.id} onClick={() => setSid(s.id)}
-                className={`h-10 px-4 rounded-xl text-sm font-semibold whitespace-nowrap cursor-pointer ${s.id === student?.id ? 'bg-slate-100 text-slate-900' : 'bg-slate-800 text-slate-300'}`}>
+                className={`h-10 px-4 rounded-xl text-sm font-semibold whitespace-nowrap cursor-pointer transition-colors ${s.id === student?.id ? 'bg-slate-100 text-slate-900' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
                 {s.fullName.split(' ').slice(0, 2).join(' ')}
               </button>
             ))}
@@ -104,13 +109,15 @@ export default function StudentApp({ me, onLogout }: { me: UserProfile; onLogout
             {tab === 'comunicados' && <Announcements store={store} student={student} />}
           </>
         )}
-      </main>
+      </motion.main>
+      </AnimatePresence>
 
-      <nav aria-label="Accesos rápidos" className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0b1222]/95 backdrop-blur border-t border-slate-800 grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
+      <nav aria-label="Accesos rápidos" className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0b1222]/90 backdrop-blur-xl border-t border-slate-800 grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
         {NAV.map((n) => (
           <button key={n.id} type="button" onClick={() => go(n.id)} aria-current={tab === n.id ? 'page' : undefined}
-            className={`h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold cursor-pointer ${tab === n.id ? 'text-orange-400' : 'text-slate-400'}`}>
-            <n.icon className="w-5 h-5" /> {n.label}
+            className={`relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold cursor-pointer transition-colors ${tab === n.id ? 'text-orange-400' : 'text-slate-400'}`}>
+            {tab === n.id && <motion.span layoutId="student-bottom-pill" className="absolute top-0 inset-x-3 h-0.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-400 shadow-[0_0_12px_rgba(249,115,22,.8)]" />}
+            <n.icon className={`w-5 h-5 transition-transform duration-300 ${tab === n.id ? '-translate-y-0.5 scale-110' : ''}`} /> {n.label}
           </button>
         ))}
       </nav>
@@ -131,7 +138,7 @@ function Overview({ store, student: s, config, go }: { store: FStore; student: S
   }, [store, s]);
   const overall = overallLiteral(s);
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader title={s.fullName} subtitle={`${s.gradeLevel} · Sección ${s.section} · ${config.academicYear} · ${config.activePeriod}`} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat label="Asistencia" value={s.totalDays ? `${s.attendanceRate}%` : '—'} hint={`${s.totalDays} días registrados`} icon={CalendarCheck} tone="emerald" />
@@ -165,7 +172,7 @@ function Grades({ student: s, config }: { student: Student; config: InstitutionC
   const n = periodCount(config);
   const level = levelOf(s);
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 stagger">
       <PageHeader title="Notas por competencia" subtitle="AD logro destacado · A logro esperado · B en proceso · C en inicio" />
       {CNEB_AREAS[level].map((a) => {
         const g = findGrade(s, a);
@@ -202,7 +209,7 @@ function AttendanceView({ store, student }: { store: FStore; student: Student })
   const [list, setList] = useState<AttendanceRecord[] | null>(null);
   useEffect(() => { store.listAttendance(student.id).then(setList).catch(() => setList([])); }, [store, student.id]);
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 stagger">
       <PageHeader title="Asistencia" subtitle={`${student.presentDays} puntual · ${student.lateDays} tardanzas · ${student.absentDays} faltas · ${student.justifiedDays || 0} justificadas`} />
       {list === null ? <p className="text-sm text-slate-400">Cargando…</p> : list.length === 0 ? <Empty icon={CalendarCheck} title="Sin registros todavía">Aquí verás cada ingreso registrado con el carnet.</Empty> : (
         <Card className="overflow-hidden">
@@ -236,7 +243,7 @@ function Tasks({ store, student, canAnswer }: { store: FStore; student: Student;
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 stagger">
       <PageHeader title="Actividades" subtitle={`Publicadas por tus docentes para ${aulaOf(student)}.`} />
       {tasks === null ? <p className="text-sm text-slate-400">Cargando…</p> : tasks.length === 0 ? <Empty icon={ClipboardList} title="No hay actividades">Cuando un docente publique una actividad para tu aula aparecerá aquí.</Empty> : (
         <div className="grid md:grid-cols-2 gap-4">
@@ -302,7 +309,7 @@ function Announcements({ store, student }: { store: FStore; student: Student }) 
   const level = levelOf(student);
   const visible = (list || []).filter((a) => a.audience === 'all' || a.audience === level);
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 stagger">
       <PageHeader title="Comunicados" />
       {list === null ? <p className="text-sm text-slate-400">Cargando…</p> : visible.length === 0 ? <Empty icon={Megaphone} title="Sin comunicados">Los comunicados del colegio aparecerán aquí.</Empty> : visible.map((a) => (
         <Card key={a.id} className="p-5">

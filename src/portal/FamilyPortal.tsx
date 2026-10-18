@@ -87,8 +87,10 @@ export default function FamilyPortal({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
-      <header className="bg-[#0f172a] text-white">
-        <div className="max-w-xl mx-auto px-4 pt-5 pb-16">
+      <header className="relative overflow-hidden bg-[#0f172a] text-white">
+        <div aria-hidden="true" className="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-orange-500/25 blur-3xl animate-orbit-1" />
+        <div aria-hidden="true" className="absolute -bottom-24 -left-16 w-64 h-64 rounded-full bg-indigo-500/20 blur-3xl animate-orbit-2" />
+        <div className="relative max-w-xl mx-auto px-4 pt-5 pb-16 stagger">
           <div className="flex items-center gap-2 text-sm text-slate-300">
             <LogoMark className="w-6 h-6" /> <span className="truncate">{inst.shortName || inst.name}</span>
           </div>
@@ -103,8 +105,8 @@ export default function FamilyPortal({ token }: { token: string }) {
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto px-4 -mt-10 pb-10 space-y-4 animate-fade-up">
-        <section className="bg-white rounded-2xl shadow-sm p-5">
+      <main className="relative max-w-xl mx-auto px-4 -mt-10 pb-10 space-y-4 stagger">
+        <section className="bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Asistencia</p>
           <div className="mt-2 flex items-end justify-between gap-4">
             <p className="text-4xl font-bold tabular-nums">{rate === null ? '—' : `${rate}%`}</p>
@@ -137,7 +139,7 @@ export default function FamilyPortal({ token }: { token: string }) {
           )}
         </section>
 
-        <section className="bg-white rounded-2xl shadow-sm p-5">
+        <section className="bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><BookOpenCheck className="w-4 h-4" /> Calificaciones</p>
           {grades.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">Aún no hay calificaciones publicadas.</p>
@@ -168,7 +170,7 @@ export default function FamilyPortal({ token }: { token: string }) {
         </section>
 
         {data.announcements.length > 0 && (
-          <section className="bg-white rounded-2xl shadow-sm p-5">
+          <section className="bg-white rounded-2xl shadow-sm p-5 transition-shadow duration-300 hover:shadow-lg hover:shadow-orange-900/10">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><Megaphone className="w-4 h-4" /> Comunicados del colegio</p>
             <ul className="mt-3 space-y-3">
               {data.announcements.map((a, i) => (

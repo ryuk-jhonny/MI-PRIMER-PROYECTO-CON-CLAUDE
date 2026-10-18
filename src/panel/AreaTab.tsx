@@ -36,7 +36,7 @@ export default function AreaTab({ ctx }: { ctx: PanelCtx }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title="Mi área CNEB"
         subtitle={`Competencias, capacidades y herramientas de ${myAreas.length === 1 ? myAreas[0] : 'tus áreas'} según el Currículo Nacional.`}
@@ -112,7 +112,7 @@ export default function AreaTab({ ctx }: { ctx: PanelCtx }) {
                 {progress.map((r) => (
                   <div key={r.aula}>
                     <div className="flex justify-between text-xs mb-1"><span className="text-slate-300 font-semibold">{r.aula}</span><span className="text-slate-400 tabular-nums">{r.graded}/{r.total}</span></div>
-                    <div className="h-2 rounded-full bg-slate-800 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-orange-600 to-amber-400 transition-[width] duration-700" style={{ width: `${r.pct}%` }} /></div>
+                    <div className="h-2 rounded-full bg-slate-800 overflow-hidden"><div className="bar-fill h-full rounded-full bg-gradient-to-r from-orange-600 to-amber-400 transition-[width] duration-700" style={{ width: `${r.pct}%` }} /></div>
                   </div>
                 ))}
               </div>

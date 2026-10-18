@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity, BookOpenCheck, CheckCircle2, ClipboardList, Compass, GraduationCap, Home, LogOut, Megaphone, Menu, NotebookPen, ScanLine, Settings, TriangleAlert, Users, X,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import AreaTab from './AreaTab';
 import PlanningTab from './PlanningTab';
 import TasksTab from './TasksTab';
 import FitnessTab from './FitnessTab';
+import { AppBackdrop } from './ui';
 
 export type Tab = 'inicio' | 'asistencia' | 'estudiantes' | 'notas' | 'area' | 'planificacion' | 'actividades' | 'fisica' | 'equipo' | 'comunicados' | 'configuracion';
 
@@ -233,15 +235,21 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
   const quick: Tab[] = role === 'docente' ? ['inicio', 'area', 'notas', 'asistencia'] : ['inicio', 'asistencia', 'estudiantes', 'notas'];
   const bottom = allowed.filter((n) => quick.includes(n.id)).slice(0, 4);
 
-  const NavList = () => (
+  // La píldora naranja se desliza hasta la sección activa (una por menú, para no cruzar animaciones).
+  const navList = (where: 'side' | 'drawer') => (
     <nav aria-label="Secciones del panel" className="space-y-1">
-      {allowed.map((n) => {
+      {allowed.map((n, i) => {
         const active = n.id === current.id;
         return (
-          <button key={n.id} type="button" onClick={() => go(n.id)} aria-current={active ? 'page' : undefined}
-            className={`w-full h-11 px-3 rounded-xl flex items-center gap-3 text-sm font-semibold cursor-pointer transition ${active ? 'bg-orange-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
-            <n.icon className="w-5 h-5 shrink-0" /> {n.label}
-          </button>
+          <motion.button key={n.id} type="button" onClick={() => go(n.id)} aria-current={active ? 'page' : undefined}
+            initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 + i * 0.035, duration: 0.35 }}
+            className={`nav-item relative w-full h-11 px-3 rounded-xl flex items-center gap-3 text-sm font-semibold cursor-pointer transition-colors ${active ? 'text-white' : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'}`}>
+            {active && (
+              <motion.span layoutId={`nav-pill-${where}`} transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                className="absolute inset-0 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 shadow-lg shadow-orange-600/30" />
+            )}
+            <n.icon className="relative w-5 h-5 shrink-0" /> <span className="relative">{n.label}</span>
+          </motion.button>
         );
       })}
     </nav>
@@ -249,26 +257,33 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
 
   const Account = () => (
     <div className="space-y-2">
-      <div className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800">
+      <div className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-2.5">
+        <span className="relative w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-orange-500 to-amber-400 text-slate-950 text-xs font-extrabold flex items-center justify-center" aria-hidden="true">
+          {meState.fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
+          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-900" />
+        </span>
+        <div className="min-w-0">
         <p className="text-sm font-semibold text-white truncate">{meState.fullName}</p>
         <p className="text-xs text-slate-400 truncate">{ROLE_LABEL[role]}{role === 'docente' && myAreas.length ? ` · ${myAreas.length === 1 ? myAreas[0] : `${myAreas.length} áreas`}` : ''}</p>
+        </div>
       </div>
-      <button type="button" onClick={onLogout} className="w-full h-11 px-3 rounded-xl flex items-center gap-3 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer">
+      <button type="button" onClick={onLogout} className="nav-item w-full h-11 px-3 rounded-xl flex items-center gap-3 text-sm font-semibold text-slate-300 hover:bg-rose-500/10 hover:text-rose-200 cursor-pointer transition-colors">
         <LogOut className="w-5 h-5" /> Cerrar sesión
       </button>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 lg:pl-64">
-      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col gap-6 p-4 bg-[#0b1222] border-r border-slate-800">
-        <button type="button" onClick={() => go('inicio')} className="px-2 pt-2 text-left cursor-pointer"><Logo className="h-8" light /></button>
-        <div className="px-3">
+    <div className="relative isolate min-h-screen text-slate-100 lg:pl-64">
+      <AppBackdrop />
+      <aside className="hidden lg:flex fixed inset-y-0 left-0 z-20 w-64 flex-col gap-6 p-4 bg-[#0b1222]/85 backdrop-blur-xl border-r border-slate-800/80">
+        <button type="button" onClick={() => go('inicio')} className="px-2 pt-2 text-left cursor-pointer transition-transform hover:scale-[1.03] origin-left"><Logo className="h-8" light /></button>
+        <div className="px-3 anim-rise">
           <p className="text-xs uppercase tracking-wider text-slate-500 font-semibold">Institución</p>
           <p className="text-sm font-bold text-white leading-snug mt-0.5">{ctx.config.shortName || ctx.config.institutionName}</p>
           <p className="text-xs text-slate-400 mt-0.5">Año {ctx.config.academicYear} · {ctx.config.activePeriod}</p>
         </div>
-        <div className="flex-1 overflow-y-auto"><NavList /></div>
+        <div className="flex-1 overflow-y-auto no-scrollbar">{navList('side')}</div>
         <Account />
       </aside>
 
@@ -282,21 +297,27 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
         </button>
       </header>
 
+      <AnimatePresence>
       {menuOpen && (
         <div className="lg:hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Menú">
-          <button type="button" aria-label="Cerrar menú" className="absolute inset-0 bg-slate-950/70" onClick={() => setMenuOpen(false)} />
-          <div className="absolute right-0 inset-y-0 w-[86%] max-w-xs bg-[#0b1222] border-l border-slate-800 p-4 flex flex-col gap-5 overflow-y-auto">
+          <motion.button type="button" aria-label="Cerrar menú" className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={() => setMenuOpen(false)}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+            className="absolute right-0 inset-y-0 w-[86%] max-w-xs bg-[#0b1222] border-l border-slate-800 p-4 flex flex-col gap-5 overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between">
               <Logo className="h-7" light />
               <button type="button" aria-label="Cerrar menú" onClick={() => setMenuOpen(false)} className="w-11 h-11 rounded-xl flex items-center justify-center cursor-pointer"><X className="w-6 h-6" /></button>
             </div>
-            <NavList />
+            {navList('drawer')}
             <div className="mt-auto"><Account /></div>
-          </div>
+          </motion.div>
         </div>
       )}
+      </AnimatePresence>
 
-      <main key={current.id} className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-10 animate-fade-up">
+      <AnimatePresence mode="wait" initial={false}>
+      <motion.main key={current.id} className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-28 lg:pb-10"
+        initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}>
         {current.id === 'inicio' && <HomeTab ctx={ctx} />}
         {current.id === 'area' && <AreaTab ctx={ctx} />}
         {current.id === 'asistencia' && <AttendanceTab ctx={ctx} />}
@@ -308,13 +329,15 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
         {current.id === 'equipo' && <TeamTab ctx={ctx} />}
         {current.id === 'comunicados' && <AnnouncementsTab ctx={ctx} />}
         {current.id === 'configuracion' && <SettingsTab ctx={ctx} />}
-      </main>
+      </motion.main>
+      </AnimatePresence>
 
-      <nav aria-label="Accesos rápidos" className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0b1222]/95 backdrop-blur border-t border-slate-800 grid pb-[env(safe-area-inset-bottom)]" style={{ gridTemplateColumns: `repeat(${bottom.length + 1}, minmax(0, 1fr))` }}>
+      <nav aria-label="Accesos rápidos" className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0b1222]/90 backdrop-blur-xl border-t border-slate-800 grid pb-[env(safe-area-inset-bottom)]" style={{ gridTemplateColumns: `repeat(${bottom.length + 1}, minmax(0, 1fr))` }}>
         {bottom.map((n) => (
           <button key={n.id} type="button" onClick={() => go(n.id)} aria-current={n.id === current.id ? 'page' : undefined}
-            className={`h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold cursor-pointer ${n.id === current.id ? 'text-orange-400' : 'text-slate-400'}`}>
-            <n.icon className="w-5 h-5" /> <span className="truncate max-w-full px-1">{n.label.split(' ')[0]}</span>
+            className={`relative h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold cursor-pointer transition-colors ${n.id === current.id ? 'text-orange-400' : 'text-slate-400'}`}>
+            {n.id === current.id && <motion.span layoutId="bottom-pill" className="absolute top-0 inset-x-4 h-0.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-400 shadow-[0_0_12px_rgba(249,115,22,.8)]" />}
+            <n.icon className={`w-5 h-5 transition-transform duration-300 ${n.id === current.id ? '-translate-y-0.5 scale-110' : ''}`} /> <span className="truncate max-w-full px-1">{n.label.split(' ')[0]}</span>
           </button>
         ))}
         <button type="button" onClick={() => setMenuOpen(true)} className="h-16 flex flex-col items-center justify-center gap-1 text-[11px] font-semibold text-slate-400 cursor-pointer">
@@ -323,12 +346,16 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
       </nav>
 
       <div className="fixed z-[60] bottom-20 lg:bottom-6 right-4 left-4 sm:left-auto sm:w-96 space-y-2" aria-live="polite">
+        <AnimatePresence initial={false}>
         {toasts.map((t) => (
-          <div key={t.id} className={`px-4 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-start gap-2.5 border animate-fade-up ${t.kind === 'ok' ? 'bg-emerald-950 border-emerald-700 text-emerald-100' : 'bg-rose-950 border-rose-700 text-rose-100'}`}>
+          <motion.div key={t.id} layout initial={{ opacity: 0, y: 24, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, x: 60 }} transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+            className={`relative overflow-hidden px-4 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-start gap-2.5 border ${t.kind === 'ok' ? 'bg-emerald-950 border-emerald-700 text-emerald-100' : 'bg-rose-950 border-rose-700 text-rose-100'}`}>
             {t.kind === 'ok' ? <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" /> : <TriangleAlert className="w-5 h-5 shrink-0 text-rose-400" />}
             <span>{t.text}</span>
-          </div>
+            <span aria-hidden="true" className={`toast-bar absolute bottom-0 left-0 h-0.5 w-full ${t.kind === 'ok' ? 'bg-emerald-400/70' : 'bg-rose-400/70'}`} style={{ animationDuration: t.kind === 'error' ? '7s' : '3.8s' }} />
+          </motion.div>
         ))}
+        </AnimatePresence>
       </div>
     </div>
   );

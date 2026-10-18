@@ -49,7 +49,7 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
   const canWrite = isDirector || me.role === 'docente';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 stagger">
       <PageHeader
         title={isDirector ? 'Planificación docente' : 'Mi planificación'}
         subtitle={isDirector ? 'Revisa y visa las unidades y sesiones de tu plana docente.' : 'Unidades y sesiones de aprendizaje con las competencias del CNEB de tus áreas.'}
