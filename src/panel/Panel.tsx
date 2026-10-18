@@ -35,7 +35,7 @@ const NAV: NavItem[] = [
   { id: 'notas', label: 'Notas y libretas', icon: BookOpenCheck, roles: ['director', 'docente'] },
   { id: 'planificacion', label: 'Planificación', icon: NotebookPen, roles: ['director', 'docente'] },
   { id: 'actividades', label: 'Actividades', icon: ClipboardList, roles: ['director', 'docente'] },
-  { id: 'fisica', label: 'Evaluación física', icon: Activity, roles: ['director', 'docente'], needsFisica: true },
+  { id: 'fisica', label: 'Evaluación física', icon: Activity, roles: ['docente'], needsFisica: true },
   { id: 'equipo', label: 'Equipo docente', icon: GraduationCap, roles: ['director'] },
   { id: 'comunicados', label: 'Comunicados', icon: Megaphone, roles: ['director', 'docente'] },
   { id: 'configuracion', label: 'Configuración', icon: Settings, roles: ['director'] },
@@ -83,7 +83,8 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
   const role = me.role as StaffRole;
   const isDirector = role === 'director';
   const myAreas = isDirector ? ALL_AREAS : meState.areas || [];
-  const hasFisica = isDirector || myAreas.some((a) => areaInfo(a)?.tool === 'fisica');
+  // La evaluación física es solo de quien enseña Educación Física, no de la dirección.
+  const hasFisica = myAreas.some((a) => areaInfo(a)?.tool === 'fisica');
   const allowed = NAV.filter((n) => n.roles.includes(role) && (!n.needsFisica || hasFisica));
   const [tab, setTab] = useState<Tab>(() => {
     const h = window.location.hash.replace('#', '') as Tab;

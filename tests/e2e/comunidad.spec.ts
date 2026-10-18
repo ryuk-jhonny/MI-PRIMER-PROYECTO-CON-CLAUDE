@@ -82,6 +82,7 @@ test('la dirección registra su colegio vacío y matricula a una estudiante', as
 
   const nav = page.getByRole('navigation', { name: 'Secciones del panel' });
   await expect(nav.getByRole('button', { name: 'Equipo docente' })).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'Evaluación física' })).toHaveCount(0);
 
   // El colegio empieza sin ningún dato.
   await nav.getByRole('button', { name: 'Estudiantes' }).click();
