@@ -108,11 +108,11 @@ export async function handlePlanRequest(request: Request, env: PlanEnv, fetchImp
       const parsed = parseJson(text);
       return json(200, toResponse(req, parsed, p.name));
     } catch (err) {
-      errors.push(`${p.name}: ${err instanceof Error ? err.message : String(err)}`);
+      errors.push(`${p.name}: ${reason(err)}`);
     }
   }
   console.error('planificar: todos los proveedores fallaron', errors);
-  return fail(502, 'La IA no respondió esta vez. Espera un momento y vuelve a intentar.');
+  return fail(502, `La IA no respondió esta vez. Espera un momento y vuelve a intentar. (Detalle: ${errors.join(' · ')})`);
 }
 
 // ---------------------------------------------------------------------
@@ -258,6 +258,27 @@ Incluye una fila de rúbrica por cada criterio de evaluación y 2 enfoques trans
 
 // ----- Proveedores -----
 
+// Una unidad completa es un JSON largo: Gemini puede tardar más de un minuto.
+// La función de Vercel tiene hasta 300 s (maxDuration en vercel.json).
+const GEMINI_TIMEOUT = 150_000;
+const GROQ_TIMEOUT = 90_000;
+
+/** "HTTP 429: Resource has been exhausted…", sin datos de la cuenta. */
+async function httpError(res: Response): Promise<string> {
+  const body = await res.text().catch(() => '');
+  let msg = '';
+  try {
+    const j = JSON.parse(body) as { error?: { message?: string } | string };
+    msg = typeof j.error === 'string' ? j.error : j.error?.message || '';
+  } catch { msg = body; }
+  return `HTTP ${res.status}${msg ? `: ${msg.replace(/\s+/g, ' ').slice(0, 160)}` : ''}`;
+}
+
+const reason = (err: unknown) => {
+  if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) return 'tardó demasiado';
+  return err instanceof Error ? err.message : String(err);
+};
+
 interface Provider { name: string; call: (system: string, user: string, f: Fetch) => Promise<string> }
 
 function providers(env: PlanEnv): Provider[] {
@@ -275,9 +296,9 @@ function providers(env: PlanEnv): Provider[] {
             contents: [{ role: 'user', parts: [{ text: user }] }],
             generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 16384 },
           }),
-          signal: AbortSignal.timeout(40_000),
+          signal: AbortSignal.timeout(GEMINI_TIMEOUT),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(await httpError(res));
         const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
         const out = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
         if (!out) throw new Error('respuesta vacía');
@@ -298,11 +319,11 @@ function providers(env: PlanEnv): Provider[] {
             messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
             response_format: { type: 'json_object' },
             temperature: 0.7,
-            max_tokens: 8000,
+            max_tokens: 7000,
           }),
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(GROQ_TIMEOUT),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error(await httpError(res));
         const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
         const out = data.choices?.[0]?.message?.content || '';
         if (!out) throw new Error('respuesta vacía');

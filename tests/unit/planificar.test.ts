@@ -105,6 +105,17 @@ describe('servidor de planificación', () => {
     expect((await res.json()).proveedor).toBe('Groq');
   });
 
+  it('si las dos fallan, dice por qué', async () => {
+    const res = await call(ask, (u) => {
+      if (u.includes('/users/doc')) return profile('docente');
+      if (u.endsWith(':commit')) return Response.json({});
+      if (u.includes('generativelanguage')) return Response.json({ error: { message: 'API key not valid.' } }, { status: 400 });
+      return Response.json({ error: { message: 'Rate limit reached' } }, { status: 429 });
+    });
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/Gemini: HTTP 400: API key not valid\. · Groq: HTTP 429: Rate limit reached/);
+  });
+
   it('solo docentes y dirección, y con límite diario', async () => {
     const est = await call(ask, (u) => (u.includes('/users/') ? profile('estudiante') : Response.json({})));
     expect(est.status).toBe(403);
