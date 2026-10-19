@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Building2, CalendarClock, Clock, Layers, Save, UserRound } from 'lucide-react';
+import { Building2, CalendarClock, Clock, Layers, Plus, Save, Trash2, UserRound } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { InstitutionConfig, DirectorProfile } from '../types/institution';
 import { Level, LEVEL_LABEL, LEVELS } from '../lib/cneb';
 import { periodNames } from '../lib/school';
-import { BellConfig, bellSlots, DEFAULT_BELL } from '../lib/schedule';
+import { BellConfig, DEFAULT_BELL, generatedSlots, hhmm, mins } from '../lib/schedule';
 import { btn, Card, input, label, PageHeader } from './ui';
 
 export default function SettingsTab({ ctx }: { ctx: PanelCtx }) {
@@ -34,10 +34,14 @@ export default function SettingsTab({ ctx }: { ctx: PanelCtx }) {
   const periods = periodNames(cfg);
   const bell = cfg.bell || DEFAULT_BELL;
   const setBell = (patch: Partial<BellConfig>) => set('bell', { ...bell, ...patch });
-  const setBreak = (i: number, patch: Partial<BellConfig['breaks'][number]>) => {
-    const list = [0, 1].map((k) => bell.breaks[k] || { after: 0, minutes: 15 });
-    list[i] = { ...list[i], ...patch };
-    setBell({ breaks: list.filter((b) => b.after > 0) });
+  // La lista que ve la dirección: la escrita a mano o, si no hay, la armada con los datos de arriba.
+  type Row = NonNullable<BellConfig['list']>[number];
+  const rows: Row[] = bell.list?.length ? bell.list : generatedSlots(bell).map(({ start, end, recreo }) => (recreo ? { start, end, recreo } : { start, end }));
+  const setRows = (list: Row[]) => setBell({ list: [...list].sort((a, b) => a.start.localeCompare(b.start)), count: list.filter((r) => !r.recreo).length });
+  const editRow = (i: number, patch: Partial<Row>) => setBell({ list: rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+  const addRow = (recreo: boolean) => {
+    const last = rows.length ? mins(rows[rows.length - 1].end) : mins(bell.start || '08:00');
+    setRows([...rows, { start: hhmm(last), end: hhmm(last + (recreo ? 15 : bell.minutes || 45)), ...(recreo ? { recreo: true } : {}) }]);
   };
 
   return (
@@ -95,34 +99,42 @@ export default function SettingsTab({ ctx }: { ctx: PanelCtx }) {
 
       <Card className="p-5 sm:p-6 space-y-4">
         <h2 className="font-bold text-white flex items-center gap-2"><CalendarClock className="w-5 h-5 text-orange-400" /> Bloques de clase</h2>
-        <p className="text-sm text-slate-400">Los docentes arman su horario eligiendo estos bloques (horas pedagógicas).</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <div><label className={label} htmlFor="bl-start">Inicio de clases</label><input id="bl-start" type="time" value={bell.start} onChange={(e) => setBell({ start: e.target.value })} className={input} /></div>
-          <div><label className={label} htmlFor="bl-min">Minutos por bloque</label><input id="bl-min" type="number" min={10} max={120} value={bell.minutes} onChange={(e) => setBell({ minutes: Number(e.target.value) })} className={input} /></div>
-          <div><label className={label} htmlFor="bl-count">Bloques por día</label><input id="bl-count" type="number" min={1} max={14} value={bell.count} onChange={(e) => setBell({ count: Number(e.target.value) })} className={input} /></div>
-          {[0, 1].map((i) => {
-            const br = bell.breaks[i] || { after: 0, minutes: 15 };
+        <p className="text-sm text-slate-400">Los docentes arman su horario eligiendo estos bloques. Puedes cambiar la hora de cada uno, agregar o borrar bloques y recreos.</p>
+        <ol className="space-y-2" aria-label="Bloques de la jornada">
+          {rows.map((x, i) => {
+            const n = rows.slice(0, i + 1).filter((r) => !r.recreo).length;
+            const name = x.recreo ? 'Recreo' : `Bloque ${n}`;
             return (
-              <div key={i} className="col-span-2 sm:col-span-3 grid grid-cols-2 gap-3">
-                <div>
-                  <label className={label} htmlFor={`bl-br${i}`}>{i === 0 ? 'Recreo' : 'Segundo recreo'} después del bloque</label>
-                  <select id={`bl-br${i}`} value={br.after} onChange={(e) => setBreak(i, { after: Number(e.target.value) })} className={input}>
-                    <option value={0}>Sin recreo</option>
-                    {Array.from({ length: Math.max(bell.count - 1, 0) }, (_, k) => k + 1).map((k) => <option key={k} value={k}>{k}.º bloque</option>)}
-                  </select>
-                </div>
-                <div><label className={label} htmlFor={`bl-brm${i}`}>Minutos de recreo</label><input id={`bl-brm${i}`} type="number" min={5} max={90} value={br.minutes} disabled={!br.after} onChange={(e) => setBreak(i, { minutes: Number(e.target.value) })} className={input} /></div>
-              </div>
+              <li key={i} className={`grid grid-cols-[6.5rem_1fr_1fr_auto] gap-2 items-center p-2 rounded-xl border ${x.recreo ? 'border-sky-500/30 bg-sky-500/5' : 'border-slate-800 bg-slate-950'}`}>
+                <span className={`text-sm font-semibold ${x.recreo ? 'text-sky-200' : 'text-white'}`}>{name}</span>
+                <input type="time" value={x.start} onChange={(e) => editRow(i, { start: e.target.value })} className={`${input} h-10`} aria-label={`Inicio de ${name}`} />
+                <input type="time" value={x.end} onChange={(e) => editRow(i, { end: e.target.value })} className={`${input} h-10`} aria-label={`Fin de ${name}`} />
+                <button type="button" onClick={() => setRows(rows.filter((_, j) => j !== i))} disabled={rows.filter((r) => !r.recreo).length <= 1 && !x.recreo}
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-rose-300 hover:bg-rose-500/10 cursor-pointer disabled:opacity-30" aria-label={`Borrar ${name}`}><Trash2 className="w-4 h-4" /></button>
+              </li>
             );
           })}
-        </div>
-        <ol className="flex flex-wrap gap-2 text-xs">
-          {bellSlots(bell).map((x) => (
-            <li key={`${x.start}${x.n}`} className={`px-2.5 py-1 rounded-lg border ${x.recreo ? 'border-sky-500/30 bg-sky-500/10 text-sky-200' : 'border-slate-700 bg-slate-950 text-slate-300'}`}>
-              {x.recreo ? 'Recreo' : `${x.n}.º`} {x.start}–{x.end}
-            </li>
-          ))}
         </ol>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => addRow(false)} disabled={rows.filter((r) => !r.recreo).length >= 14} className={btn.secondary}><Plus className="w-4 h-4" /> Agregar bloque</button>
+          <button type="button" onClick={() => addRow(true)} className={btn.ghost}><Plus className="w-4 h-4" /> Agregar recreo</button>
+        </div>
+        <details className="rounded-xl border border-slate-800 p-3">
+          <summary className="text-sm font-semibold text-slate-200 cursor-pointer">Armar todos los bloques de una vez</summary>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-3 items-end">
+            <div><label className={label} htmlFor="bl-start">Inicio de clases</label><input id="bl-start" type="time" value={bell.start} onChange={(e) => setBell({ start: e.target.value })} className={input} /></div>
+            <div><label className={label} htmlFor="bl-min">Minutos por bloque</label><input id="bl-min" type="number" min={10} max={120} value={bell.minutes} onChange={(e) => setBell({ minutes: Number(e.target.value) })} className={input} /></div>
+            <div><label className={label} htmlFor="bl-count">Bloques por día</label><input id="bl-count" type="number" min={1} max={14} value={bell.count} onChange={(e) => setBell({ count: Number(e.target.value) })} className={input} /></div>
+            <div><label className={label} htmlFor="bl-br">Recreo después del bloque</label>
+              <select id="bl-br" value={bell.breaks[0]?.after || 0} onChange={(e) => setBell({ breaks: Number(e.target.value) ? [{ after: Number(e.target.value), minutes: bell.breaks[0]?.minutes || 30 }] : [] })} className={input}>
+                <option value={0}>Sin recreo</option>
+                {Array.from({ length: Math.max(bell.count - 1, 0) }, (_, k) => k + 1).map((k) => <option key={k} value={k}>{k}.º</option>)}
+              </select>
+            </div>
+            <div><label className={label} htmlFor="bl-brm">Minutos de recreo</label><input id="bl-brm" type="number" min={5} max={90} value={bell.breaks[0]?.minutes || 30} disabled={!bell.breaks[0]} onChange={(e) => setBell({ breaks: [{ after: bell.breaks[0]?.after || 4, minutes: Number(e.target.value) }] })} className={input} /></div>
+          </div>
+          <button type="button" onClick={() => setRows(generatedSlots({ ...bell, list: undefined }).map(({ start, end, recreo }) => (recreo ? { start, end, recreo } : { start, end })))} className={`${btn.secondary} mt-3`}>Rehacer los bloques con estos datos</button>
+        </details>
       </Card>
 
       <Card className="p-5 sm:p-6 space-y-4">

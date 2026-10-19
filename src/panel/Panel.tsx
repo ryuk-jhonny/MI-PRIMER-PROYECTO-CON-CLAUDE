@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, BookOpenCheck, CalendarClock, CheckCircle2, ClipboardList, Compass, GraduationCap, Home, LogOut, Megaphone, Menu, NotebookPen, ScanLine, Settings, TriangleAlert, Users, X, ListChecks,
+  Activity, BarChart3, BookOpenCheck, CalendarClock, CheckCircle2, ClipboardList, Compass, GraduationCap, Home, LogOut, Megaphone, Menu, NotebookPen, ScanLine, Settings, TriangleAlert, Users, X, ListChecks,
 } from 'lucide-react';
 import { Student } from '../types/education';
 import { DirectorProfile, InstitutionConfig } from '../types/institution';
@@ -25,15 +25,17 @@ import TasksTab from './TasksTab';
 import FitnessTab from './FitnessTab';
 import ScheduleTab from './ScheduleTab';
 import ClassAttendanceTab from './ClassAttendanceTab';
+import DashboardTab from './DashboardTab';
 import { AppBackdrop } from './ui';
 import { EASE_OUT, ScrollProgressBar, useAutoReveal, useSpotlight } from '../lib/motionKit';
 
-export type Tab = 'inicio' | 'horario' | 'asistencia' | 'clase' | 'estudiantes' | 'notas' | 'area' | 'planificacion' | 'actividades' | 'fisica' | 'equipo' | 'comunicados' | 'configuracion';
+export type Tab = 'inicio' | 'resumen' | 'horario' | 'asistencia' | 'clase' | 'estudiantes' | 'notas' | 'area' | 'planificacion' | 'actividades' | 'fisica' | 'equipo' | 'comunicados' | 'configuracion';
 
 interface NavItem { id: Tab; label: string; icon: typeof Home; roles: StaffRole[]; needsFisica?: boolean }
 
 const NAV: NavItem[] = [
   { id: 'inicio', label: 'Inicio', icon: Home, roles: ['director', 'docente', 'auxiliar'] },
+  { id: 'resumen', label: 'Resumen', icon: BarChart3, roles: ['director', 'docente'] },
   { id: 'area', label: 'Mi área CNEB', icon: Compass, roles: ['docente'] },
   { id: 'asistencia', label: 'Asistencia QR', icon: ScanLine, roles: ['director', 'auxiliar'] },
   { id: 'clase', label: 'Asistencia de clase', icon: ListChecks, roles: ['director', 'docente'] },
@@ -333,6 +335,7 @@ export default function Panel({ me, onLogout }: { me: UserProfile; onLogout: () 
         {current.id === 'area' && <AreaTab ctx={ctx} />}
         {current.id === 'asistencia' && <AttendanceTab ctx={ctx} />}
         {current.id === 'clase' && <ClassAttendanceTab ctx={ctx} />}
+        {current.id === 'resumen' && <DashboardTab ctx={ctx} />}
         {current.id === 'estudiantes' && <StudentsTab ctx={ctx} />}
         {current.id === 'notas' && <GradesTab ctx={ctx} />}
         {current.id === 'horario' && <ScheduleTab ctx={ctx} />}

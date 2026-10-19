@@ -1,3 +1,4 @@
+import type { Plan } from './store';
 // Documento completo de una unidad o sesión con la estructura del docente
 // (la que arma la IA y se descarga en Word). Lo usan la app y el servidor.
 
@@ -43,7 +44,7 @@ export interface UnidadDoc {
 
 export interface Momento { actividades: string; minutos: number; materiales: string[] }
 
-export interface RubricaFila { criterio: string; destacado: string; esperado: string; proceso: string; inicio: string }
+export interface RubricaFila { criterio: string; destacado: string; esperado: string; proceso: string; inicio: string; /** Competencia que evalúa este criterio. */ competencia?: string }
 
 export interface SesionDoc {
   tipo: 'sesion';
@@ -113,7 +114,7 @@ export function normalizeSesion(raw: unknown, numero = 1, unidad = 1, minutosTot
     inicio: momento(o.inicio, inicio),
     desarrollo: momento(o.desarrollo, Math.max(10, minutosTotal - inicio - cierre)),
     cierre: momento(o.cierre, cierre),
-    rubrica: rows(o.rubrica, (r) => ({ criterio: str(r.criterio, 600), destacado: str(r.destacado, 800), esperado: str(r.esperado, 800), proceso: str(r.proceso, 800), inicio: str(r.inicio, 800) }), 8),
+    rubrica: rows(o.rubrica, (r) => ({ criterio: str(r.criterio, 600), destacado: str(r.destacado, 800), esperado: str(r.esperado, 800), proceso: str(r.proceso, 800), inicio: str(r.inicio, 800), ...(str(r.competencia, 300) ? { competencia: str(r.competencia, 300) } : {}) }), 8),
   };
 }
 
@@ -153,3 +154,12 @@ export function rubricaDesde(criterio: string): RubricaFila {
     inicio: `Aún no ${low}; necesita acompañamiento.`,
   };
 }
+
+/** La rúbrica de una sesión: la que armó la IA, la que escribió el docente o, si no hay, una desde sus criterios. */
+export function rubricaOf(p: Pick<Plan, 'detalle' | 'rubrica' | 'criterios'>): RubricaFila[] {
+  if (p.detalle?.tipo === 'sesion' && p.detalle.rubrica.length) return p.detalle.rubrica;
+  if (p.rubrica?.length) return p.rubrica;
+  const crit = p.detalle?.tipo === 'sesion' ? p.detalle.proposito.flatMap((x) => x.criterios) : p.criterios.split('\n');
+  return crit.map((c) => c.trim()).filter(Boolean).map(rubricaDesde);
+}
+

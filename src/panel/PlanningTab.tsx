@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, Copy, FilePlus2, Grid3x3, ListOrdered, MessageSquareWarning, NotebookPen, Pencil, Plus, Printer, Send, Sparkles, Trash2, X } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, ClipboardCheck, Copy, FilePlus2, Grid3x3, ListOrdered, MessageSquareWarning, NotebookPen, Pencil, Plus, Printer, Send, Sparkles, Trash2, X } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Plan, PlanStatus } from '../lib/store';
 import { friendlyError } from '../lib/firebase';
@@ -8,7 +8,8 @@ import { aulaOf, periodNames } from '../lib/school';
 import { Badge, btn, Card, Empty, input, label, Modal, PageHeader, textarea } from './ui';
 import { withDetalle } from '../lib/planAi';
 import { AiModal, cleanDetalle, DetalleEditor, DetalleView, RubricaEditor, UnitSessions, WordButton, wordInfo } from './PlanAi';
-import { RubricaFila, rubricaDesde } from '../lib/planDoc';
+import { rubricaDesde, rubricaOf } from '../lib/planDoc';
+import RubricGrade from './RubricGrade';
 
 const STATUS_STYLE: Record<PlanStatus, string> = {
   Borrador: 'bg-slate-800 text-slate-300 border-slate-700',
@@ -27,6 +28,7 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
   const [asking, setAsking] = useState(false);
   const [sessionsOf, setSessionsOf] = useState<Plan | null>(null);
   const [rubricOf, setRubricOf] = useState<Plan | null>(null);
+  const [grading, setGrading] = useState<Plan | null>(null);
   const [period, setPeriod] = useState('');
   const [owner, setOwner] = useState('');
 
@@ -88,6 +90,7 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
           {p.detalle && <WordButton ctx={ctx} plan={p} />}
           {p.kind === 'unidad' && p.detalle?.tipo === 'unidad' && mine && <button type="button" onClick={() => setSessionsOf(p)} className={btn.secondary}><ListOrdered className="w-4 h-4" /> Generar sesiones</button>}
           {p.kind === 'sesion' && <button type="button" onClick={() => setRubricOf(p)} className={btn.secondary}><Grid3x3 className="w-4 h-4" /> Rúbrica</button>}
+          {p.kind === 'sesion' && mine && <button type="button" onClick={() => setGrading(p)} className={btn.secondary}><BookOpenCheck className="w-4 h-4" /> Calificar</button>}
           {p.kind === 'sesion' && p.instrumento === 'Lista de cotejo' && <button type="button" onClick={() => setChecklist(p)} className={btn.secondary}><ClipboardCheck className="w-4 h-4" /> Lista de cotejo</button>}
           {mine && <button type="button" onClick={() => setEditing(p)} className={btn.ghost} aria-label="Editar"><Pencil className="w-4 h-4" /></button>}
           {mine && <button type="button" onClick={() => setEditing({ ...p, id: '', title: `${p.title} (copia)`, status: 'Borrador', observacion: '' })} className={btn.ghost} aria-label="Duplicar"><Copy className="w-4 h-4" /></button>}
@@ -168,6 +171,7 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
       {editing && <PlanEditor ctx={ctx} plan={editing} units={(plans || []).filter((x) => x.kind === 'unidad' && x.ownerUid === (editing.ownerUid || me.uid))} onClose={() => setEditing(null)} onSave={async (p) => { const ok = await save(p, 'Documento guardado.'); if (ok) setEditing(null); }} />}
       {viewing && <PlanDocument ctx={ctx} plan={viewing} onClose={() => setViewing(null)} />}
       {checklist && <Checklist ctx={ctx} plan={checklist} onClose={() => setChecklist(null)} />}
+      {grading && <RubricGrade ctx={ctx} plan={grading} plans={plans || []} onClose={() => setGrading(null)} />}
       {rubricOf && <RubricaSheet ctx={ctx} plan={rubricOf} unit={(plans || []).find((x) => x.id === rubricOf.unidadId)} onClose={() => setRubricOf(null)} />}
       {asking && <AiModal ctx={ctx} makePlan={(k) => newPlan(ctx, k)} onClose={() => setAsking(false)} onDone={(p) => { setAsking(false); setEditing(p); }} />}
       {sessionsOf && <UnitSessions ctx={ctx} unit={sessionsOf} plans={plans || []} makePlan={(k) => newPlan(ctx, k)} onClose={() => setSessionsOf(null)} onOpen={(p) => { setSessionsOf(null); setEditing(p); }} />}
@@ -372,7 +376,7 @@ function PlanEditor({ ctx, plan, units, onClose, onSave }: { ctx: PanelCtx; plan
 
         {p.kind === 'sesion' && (
           <div className="space-y-2">
-            <RubricaEditor items={p.rubrica || []} onChange={(v) => set('rubrica', v)} />
+            <RubricaEditor items={p.rubrica || []} onChange={(v) => set('rubrica', v)} competencias={comps.filter((c) => p.competencias.includes(c.id)).map((c) => c.name)} />
             {criteriosList.length > 0 && <button type="button" onClick={fromCriterios} className={btn.secondary}><Grid3x3 className="w-4 h-4" /> Armar la rúbrica con mis criterios</button>}
           </div>
         )}
@@ -512,14 +516,6 @@ function Checklist({ ctx, plan: p, onClose }: { ctx: PanelCtx; plan: Plan; onClo
       {criterios.length > 0 && <ol className="mt-4 list-decimal pl-5 text-xs space-y-0.5">{criterios.map((c, i) => <li key={i}>{c}</li>)}</ol>}
     </PrintFrame>
   );
-}
-
-/** La rúbrica de una sesión: la que armó la IA, la que escribió el docente o, si no hay, una desde sus criterios. */
-export function rubricaOf(p: Plan): RubricaFila[] {
-  if (p.detalle?.tipo === 'sesion' && p.detalle.rubrica.length) return p.detalle.rubrica;
-  if (p.rubrica?.length) return p.rubrica;
-  const crit = p.detalle?.tipo === 'sesion' ? p.detalle.proposito.flatMap((x) => x.criterios) : p.criterios.split('\n');
-  return crit.map((c) => c.trim()).filter(Boolean).map(rubricaDesde);
 }
 
 function RubricaSheet({ ctx, plan: p, unit, onClose }: { ctx: PanelCtx; plan: Plan; unit?: Plan; onClose: () => void }) {

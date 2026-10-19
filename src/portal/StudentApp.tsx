@@ -3,11 +3,12 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Activity, BookOpenCheck, CalendarCheck, CheckCircle2, ClipboardList, Clock, Home, LogOut, Megaphone, Send, TriangleAlert, UserX } from 'lucide-react';
 import { Student } from '../types/education';
 import { InstitutionConfig } from '../types/institution';
-import { Announcement, AttendanceRecord, createFamilyStore, FitnessRecord, ROLE_LABEL, Task, TaskResponse, UserProfile } from '../lib/store';
+import { Announcement, AttendanceRecord, ClassMark, createFamilyStore, FitnessRecord, ROLE_LABEL, Task, TaskResponse, UserProfile } from '../lib/store';
 import { friendlyError } from '../lib/firebase';
 import { competenciasOf, COMPETENCIAS } from '../lib/cneb';
 import { aulaOf, CNEB_AREAS, compUnitsOf, findGrade, formatDay, levelOf, LITERAL_STYLE, periodCount, periodLabel, statusOf, unitsOf, overallLiteral } from '../lib/school';
-import { AppBackdrop, Badge, btn, Card, Empty, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
+import { AppBackdrop, Badge, btn, Card, Empty, input, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
+import { LiteralBar, LiteralLegend } from '../panel/DashboardTab';
 import FullLoader from '../app/FullLoader';
 import Logo from '../app/Logo';
 import { bellSlots, dayName, nowIn, OwnedBlock, sortBlocks } from '../lib/schedule';
@@ -213,10 +214,36 @@ function Overview({ store, student: s, config, go }: { store: FStore; student: S
 function Grades({ student: s, config }: { student: Student; config: InstitutionConfig }) {
   const n = periodCount(config);
   const level = levelOf(s);
+  const [period, setPeriod] = useState(-1);
+  const [area, setArea] = useState('');
+  const areas = CNEB_AREAS[level];
+  const shown = area ? [area] : areas;
+  const periods = period < 0 ? Array.from({ length: n }, (_, i) => i) : [period];
+  // Resumen: cuántas competencias tiene en AD, A, B y C en lo filtrado.
+  const counts: Record<string, number> = {};
+  shown.forEach((a) => competenciasOf(a, level).forEach((c) => periods.forEach((i) => { const v = compUnitsOf(findGrade(s, a), c.id, n)[i]; if (v) counts[v] = (counts[v] || 0) + 1; })));
   return (
     <div className="space-y-4 stagger">
       <PageHeader title="Notas por competencia" subtitle="AD logro destacado · A logro esperado · B en proceso · C en inicio" />
-      {CNEB_AREAS[level].map((a) => {
+      <Card className="p-4 grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="sg-period">Periodo</label>
+          <select id="sg-period" value={period} onChange={(e) => setPeriod(Number(e.target.value))} className={input}>
+            <option value={-1}>Todo el año</option>{Array.from({ length: n }, (_, i) => <option key={i} value={i}>{periodLabel(config, i)}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="sg-area">Área</label>
+          <select id="sg-area" value={area} onChange={(e) => setArea(e.target.value)} className={input}>
+            <option value="">Todas</option>{areas.map((a) => <option key={a}>{a}</option>)}
+          </select>
+        </div>
+      </Card>
+      <Card className="p-4 space-y-3">
+        <LiteralLegend />
+        <LiteralBar counts={counts} label={`Competencias calificadas${period < 0 ? ' en el año' : ` en ${periodLabel(config, period)}`}`} />
+      </Card>
+      {shown.map((a) => {
         const g = findGrade(s, a);
         const comps = competenciasOf(a, level);
         return (
@@ -226,16 +253,15 @@ function Grades({ student: s, config }: { student: Student; config: InstitutionC
               <Badge className={LITERAL_STYLE[g?.average || '']}>{g?.average || '—'}</Badge>
             </div>
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-xs min-w-[420px]">
-                <thead><tr className="text-slate-400"><th className="text-left font-semibold py-1.5">Competencia</th>{Array.from({ length: n }, (_, i) => <th key={i} className="font-semibold py-1.5 w-14">{periodLabel(config, i)}</th>)}</tr></thead>
+              <table className="w-full text-xs min-w-[320px]">
+                <thead><tr className="text-slate-400"><th className="text-left font-semibold py-1.5">Competencia</th>{periods.map((i) => <th key={i} className="font-semibold py-1.5 w-14">{periodLabel(config, i)}</th>)}</tr></thead>
                 <tbody className="divide-y divide-slate-800">
                   {comps.map((c) => (
                     <tr key={c.id}>
-                      <td className="py-2 pr-2 text-slate-300">{c.name}</td>
-                      {compUnitsOf(g, c.id, n).map((v, i) => <td key={i} className="py-2 text-center"><span className={`inline-block min-w-9 px-1.5 py-0.5 rounded-md border font-bold ${LITERAL_STYLE[v]}`}>{v || '—'}</span></td>)}
+                      <td className="py-2 pr-2 text-slate-300">C{c.n}. {c.name}</td>
+                      {periods.map((i) => { const v = compUnitsOf(g, c.id, n)[i]; return <td key={i} className="py-2 text-center"><span className={`inline-block min-w-9 px-1.5 py-0.5 rounded-md border font-bold ${LITERAL_STYLE[v]}`}>{v || '—'}</span></td>; })}
                     </tr>
                   ))}
-                  <tr className="font-bold"><td className="py-2 text-white">Área</td>{unitsOf(g, n).map((v, i) => <td key={i} className="py-2 text-center text-white">{v || '—'}</td>)}</tr>
                 </tbody>
               </table>
             </div>
@@ -247,24 +273,89 @@ function Grades({ student: s, config }: { student: Student; config: InstitutionC
   );
 }
 
+const MARK_NAME: Record<ClassMark, string> = { P: 'Presente', T: 'Tarde', F: 'Falta', J: 'Justificada' };
+const MARK_TONE: Record<ClassMark, string> = { P: STATUS_STYLE.Puntual, T: STATUS_STYLE.Tardanza, F: STATUS_STYLE.Inasistencia, J: STATUS_STYLE.Justificada };
+
 function AttendanceView({ store, student }: { store: FStore; student: Student }) {
   const [list, setList] = useState<AttendanceRecord[] | null>(null);
-  useEffect(() => { store.listAttendance(student.id).then(setList).catch(() => setList([])); }, [store, student.id]);
+  const [marks, setMarks] = useState<{ day: string; area: string; mark: ClassMark }[] | null>(null);
+  const [view, setView] = useState<'puerta' | 'clase'>('puerta');
+  const [month, setMonth] = useState('');
+  const [area, setArea] = useState('');
+  useEffect(() => {
+    store.listAttendance(student.id).then(setList).catch(() => setList([]));
+    store.listClassMarks(student.id).then(setMarks).catch(() => setMarks([]));
+  }, [store, student.id]);
+  const months = [...new Set([...(list || []).map((r) => r.day.slice(0, 7)), ...(marks || []).map((m) => m.day.slice(0, 7))])].sort().reverse();
+  const monthName = (m: string) => new Date(`${m}-15T12:00:00`).toLocaleDateString('es-PE', { month: 'long', year: 'numeric' });
+  const gate = (list || []).filter((r) => !month || r.day.startsWith(month));
+  const cls = (marks || []).filter((m) => (!month || m.day.startsWith(month)) && (!area || m.area === area));
+  const areas = [...new Set((marks || []).map((m) => m.area))].sort();
+  const count = <T,>(l: T[], f: (x: T) => boolean) => l.filter(f).length;
+  const rate = (ok: number, total: number) => (total ? `${Math.round((ok / total) * 100)}%` : '—');
   return (
     <div className="space-y-4 stagger">
-      <PageHeader title="Asistencia" subtitle={`${student.presentDays} puntual · ${student.lateDays} tardanzas · ${student.absentDays} faltas · ${student.justifiedDays || 0} justificadas`} />
-      {list === null ? <p className="text-sm text-slate-400">Cargando…</p> : list.length === 0 ? <Empty icon={CalendarCheck} title="Sin registros todavía">Aquí verás cada ingreso registrado con el carnet.</Empty> : (
-        <Card className="overflow-hidden">
-          <ul className="divide-y divide-slate-800">
-            {list.map((r) => (
-              <li key={r.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                <span className="text-sm text-slate-200 capitalize">{formatDay(r.day)}</span>
-                <span className="flex items-center gap-2"><span className="text-xs text-slate-400 tabular-nums">{r.time?.slice(0, 5) || ''}</span><Badge className={STATUS_STYLE[r.status]}>{r.status}</Badge></span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+      <PageHeader title="Asistencia" subtitle="La de la puerta (con el carnet) y la de cada clase." />
+      <div className="flex gap-2">
+        {(['puerta', 'clase'] as const).map((v) => (
+          <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)} className={`h-10 px-4 rounded-xl text-sm font-semibold cursor-pointer ${view === v ? 'bg-orange-600 text-white' : 'bg-slate-800 text-slate-300'}`}>{v === 'puerta' ? 'Puerta' : 'Clases'}</button>
+        ))}
+      </div>
+      <Card className={`p-4 grid gap-3 ${view === 'clase' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <div>
+          <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="sa-month">Mes</label>
+          <select id="sa-month" value={month} onChange={(e) => setMonth(e.target.value)} className={input}>
+            <option value="">Todo el año</option>{months.map((m) => <option key={m} value={m}>{monthName(m)}</option>)}
+          </select>
+        </div>
+        {view === 'clase' && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5" htmlFor="sa-area">Área</label>
+            <select id="sa-area" value={area} onChange={(e) => setArea(e.target.value)} className={input}>
+              <option value="">Todas</option>{areas.map((a) => <option key={a}>{a}</option>)}
+            </select>
+          </div>
+        )}
+      </Card>
+      {view === 'puerta' ? (<>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Stat label="Asistencia" value={rate(count(gate, (r) => r.status !== 'Inasistencia'), gate.length)} hint={gate.length === 1 ? '1 día' : `${gate.length} días`} icon={CalendarCheck} tone="emerald" />
+          <Stat label="Puntual" value={count(gate, (r) => r.status === 'Puntual')} icon={CheckCircle2} tone="sky" />
+          <Stat label="Tardanzas" value={count(gate, (r) => r.status === 'Tardanza')} icon={Clock} tone="amber" />
+          <Stat label="Faltas" value={count(gate, (r) => r.status === 'Inasistencia')} hint={`${count(gate, (r) => r.status === 'Justificada')} justificadas`} icon={UserX} tone="rose" />
+        </div>
+        {list === null ? <p className="text-sm text-slate-400">Cargando…</p> : gate.length === 0 ? <Empty icon={CalendarCheck} title="Sin registros">Aquí verás cada ingreso registrado con el carnet.</Empty> : (
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-slate-800">
+              {gate.map((r) => (
+                <li key={r.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <span className="text-sm text-slate-200 capitalize">{formatDay(r.day)}</span>
+                  <span className="flex items-center gap-2"><span className="text-xs text-slate-400 tabular-nums">{r.time?.slice(0, 5) || ''}</span><Badge className={STATUS_STYLE[r.status]}>{r.status}</Badge></span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </>) : (<>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Stat label="Asistencia" value={rate(count(cls, (m) => m.mark !== 'F'), cls.length)} hint={cls.length === 1 ? '1 clase' : `${cls.length} clases`} icon={CalendarCheck} tone="emerald" />
+          <Stat label="Presente" value={count(cls, (m) => m.mark === 'P')} icon={CheckCircle2} tone="sky" />
+          <Stat label="Tarde" value={count(cls, (m) => m.mark === 'T')} icon={Clock} tone="amber" />
+          <Stat label="Faltas" value={count(cls, (m) => m.mark === 'F')} hint={`${count(cls, (m) => m.mark === 'J')} justificadas`} icon={UserX} tone="rose" />
+        </div>
+        {marks === null ? <p className="text-sm text-slate-400">Cargando…</p> : cls.length === 0 ? <Empty icon={CalendarCheck} title="Sin registros">Aquí verás la asistencia que toma cada docente en su clase.</Empty> : (
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-slate-800">
+              {cls.map((m) => (
+                <li key={`${m.day}${m.area}`} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <span className="text-sm text-slate-200"><span className="capitalize">{formatDay(m.day)}</span><span className="block text-xs text-slate-400">{m.area}</span></span>
+                  <Badge className={MARK_TONE[m.mark]}>{MARK_NAME[m.mark]}</Badge>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </>)}
     </div>
   );
 }

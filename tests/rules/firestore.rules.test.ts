@@ -292,6 +292,31 @@ describe('Asistencia de clase', () => {
   });
 });
 
+describe('Copia de la asistencia de clase y calificación con rúbrica', () => {
+  const marks = (fs: Firestore, sid = SID) => doc(fs, 'institutions', IID, 'classMarks', sid);
+  it('cada docente escribe solo su parte y el estudiante ve la suya', async () => {
+    await assertSucceeds(setDoc(marks(db('doc')), { byTeacher: { doc: { '2026-03-11_matematica': { d: '2026-03-11', a: 'Matemática', m: 'P' } } } }, { merge: true }));
+    await assertSucceeds(setDoc(marks(db('dir')), { byTeacher: { dir: { '2026-03-11_arte': { d: '2026-03-11', a: 'Arte', m: 'F' } } } }, { merge: true }));
+    await assertFails(setDoc(marks(db('doc')), { byTeacher: { dir: { x: { d: '2026-03-11', a: 'Arte', m: 'P' } } } }, { merge: true }));
+    await assertFails(setDoc(marks(db('aux')), { byTeacher: { aux: {} } }, { merge: true }));
+    await assertFails(setDoc(marks(db('est')), { byTeacher: { est: {} } }, { merge: true }));
+    await assertSucceeds(getDoc(marks(db('est'))));
+    await assertSucceeds(getDoc(marks(db('fam'))));
+    await assertFails(getDoc(marks(db('est'), SID2)));
+  });
+  it('la rúbrica calificada es de su docente; la dirección la ve', async () => {
+    const ref = (fs: Firestore) => doc(fs, 'institutions', IID, 'rubricScores', 'pl_1_1ro-primaria-a');
+    const data = (owner: string) => ({ ownerUid: owner, planId: 'pl_1', aula: '1ro Primaria · A', links: { 0: 'c23' }, scores: { [SID]: { 0: 4 } }, updatedAt: 'x' });
+    await assertSucceeds(setDoc(ref(db('doc')), data('doc')));
+    await assertFails(setDoc(ref(db('dir')), data('dir')));
+    await assertFails(setDoc(doc(db('doc'), 'institutions', IID, 'rubricScores', 'otro'), data('dir')));
+    await assertSucceeds(getDoc(ref(db('doc'))));
+    await assertSucceeds(getDoc(ref(db('dir'))));
+    await assertFails(getDoc(ref(db('est'))));
+    await assertFails(getDoc(ref(db('aux'))));
+  });
+});
+
 describe('Horarios', () => {
   const sched = (uid: string, extra: Record<string, unknown> = {}) => ({
     ownerUid: uid, ownerName: uid, updatedAt: '2026-03-10',

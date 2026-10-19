@@ -28,7 +28,7 @@ export interface OwnedBlock extends ClassBlock { ownerUid: string; ownerName: st
 export const MAX_BLOCKS = 80;
 
 export const dayName = (d: number) => DAYS[d - 1] || '';
-const mins = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + (m || 0); };
+export const mins = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + (m || 0); };
 
 export function sortBlocks<T extends ClassBlock>(list: T[]): T[] {
   return [...list].sort((a, b) => a.day - b.day || a.start.localeCompare(b.start));
@@ -92,20 +92,34 @@ export interface BellConfig {
   minutes: number;
   count: number;
   breaks: { after: number; minutes: number }[];
+  /** Bloques escritos a mano por la dirección (si existe, manda sobre lo de arriba). */
+  list?: { start: string; end: string; recreo?: boolean }[];
 }
 
-export const DEFAULT_BELL: BellConfig = { start: '08:00', minutes: 45, count: 8, breaks: [{ after: 4, minutes: 30 }] };
+export const DEFAULT_BELL: BellConfig = { start: '08:00', minutes: 45, count: 9, breaks: [{ after: 4, minutes: 30 }] };
 
 export interface Slot { n: number; start: string; end: string; recreo?: boolean }
 
-const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+export const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 /** Filas de la jornada: los bloques numerados y los recreos entre ellos. */
 export function bellSlots(bell: BellConfig = DEFAULT_BELL): Slot[] {
+  if (bell.list?.length) {
+    let n = 0;
+    return [...bell.list]
+      .filter((x) => /^\d{2}:\d{2}$/.test(x.start) && /^\d{2}:\d{2}$/.test(x.end) && mins(x.end) > mins(x.start))
+      .sort((a, b) => a.start.localeCompare(b.start))
+      .map((x) => (x.recreo ? { n: 0, start: x.start, end: x.end, recreo: true } : { n: ++n, start: x.start, end: x.end }));
+  }
+  return generatedSlots(bell);
+}
+
+/** Bloques armados con la hora de inicio, los minutos por bloque y los recreos. */
+export function generatedSlots(bell: BellConfig): Slot[] {
   const out: Slot[] = [];
   let t = /^\d{2}:\d{2}$/.test(bell.start) ? mins(bell.start) : 480;
   const len = Math.min(Math.max(Math.round(bell.minutes) || 45, 10), 120);
-  const count = Math.min(Math.max(Math.round(bell.count) || 8, 1), 14);
+  const count = Math.min(Math.max(Math.round(bell.count) || 9, 1), 14);
   for (let n = 1; n <= count; n++) {
     out.push({ n, start: hhmm(t), end: hhmm(t + len) });
     t += len;
