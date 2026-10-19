@@ -281,37 +281,74 @@ const reason = (err: unknown) => {
 
 interface Provider { name: string; call: (system: string, user: string, f: Fetch) => Promise<string> }
 
+/** Modelos de Groq en orden de preferencia; Groq retira modelos seguido, así que se elige uno que exista. */
+const GROQ_PREFERRED = [
+  'openai/gpt-oss-120b',
+  'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'moonshotai/kimi-k2-instruct-0905',
+  'moonshotai/kimi-k2-instruct',
+  'llama-3.3-70b-versatile',
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3-32b',
+];
+
+/** El primer modelo de chat disponible en la cuenta de Groq. */
+export async function pickGroqModel(key: string, f: Fetch): Promise<string> {
+  const res = await f('https://api.groq.com/openai/v1/models', { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(await httpError(res));
+  const ids = (((await res.json()) as { data?: { id?: string; active?: boolean }[] }).data || [])
+    .filter((m) => m.id && m.active !== false).map((m) => m.id as string);
+  const chat = ids.filter((id) => !/whisper|guard|tts|playai|orpheus|distil|compound|prompt/i.test(id));
+  const found = GROQ_PREFERRED.find((m) => chat.includes(m)) || chat[0];
+  if (!found) throw new Error('no hay modelos de chat en tu cuenta de Groq');
+  return found;
+}
+
 function providers(env: PlanEnv): Provider[] {
   const list: Provider[] = [];
   if (env.GEMINI_API_KEY) {
     const model = env.GEMINI_MODEL || 'gemini-flash-latest';
+    const ask = (f: Fetch, system: string, user: string, thinking: boolean) =>
+      f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY! },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: {
+            responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 16384,
+            // Sin "pensar" antes de escribir: la estructura ya va en el pedido y así la unidad sale en segundos, no minutos.
+            ...(thinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
+          },
+        }),
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT),
+      });
     list.push({
       name: 'Gemini',
       async call(system, user, f) {
-        const res = await f(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY! },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: system }] },
-            contents: [{ role: 'user', parts: [{ text: user }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 16384 },
-          }),
-          signal: AbortSignal.timeout(GEMINI_TIMEOUT),
-        });
+        let res = await ask(f, system, user, false);
+        // Algunos modelos no aceptan apagar el razonamiento: se pide otra vez sin esa opción.
+        if (res.status === 400) {
+          const detail = await httpError(res);
+          if (!/think/i.test(detail)) throw new Error(detail);
+          res = await ask(f, system, user, true);
+        }
         if (!res.ok) throw new Error(await httpError(res));
-        const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-        const out = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-        if (!out) throw new Error('respuesta vacía');
+        const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[] };
+        const c = data.candidates?.[0];
+        const out = c?.content?.parts?.filter((p) => !p.thought).map((p) => p.text || '').join('') || '';
+        if (!out) throw new Error(`respuesta vacía${c?.finishReason ? ` (${c.finishReason})` : ''}`);
         return out;
       },
     });
   }
   if (env.GROQ_API_KEY) {
-    const model = env.GROQ_MODEL || 'llama-3.3-70b-versatile';
     list.push({
       name: 'Groq',
       async call(system, user, f) {
-        const res = await f('https://api.groq.com/openai/v1/chat/completions', {
+        const model = env.GROQ_MODEL || await pickGroqModel(env.GROQ_API_KEY!, f);
+        const send = (maxTokens: number) => f('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${env.GROQ_API_KEY}` },
           body: JSON.stringify({
@@ -319,14 +356,24 @@ function providers(env: PlanEnv): Provider[] {
             messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
             response_format: { type: 'json_object' },
             temperature: 0.7,
-            max_tokens: 7000,
+            max_tokens: maxTokens,
+            ...(/gpt-oss/.test(model) ? { reasoning_effort: 'low' } : {}),
           }),
           signal: AbortSignal.timeout(GROQ_TIMEOUT),
         });
-        if (!res.ok) throw new Error(await httpError(res));
-        const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+        let res = await send(7000);
+        // Plan gratuito: si el pedido pasa el límite de tokens por minuto, se pide una respuesta más corta.
+        if (res.status === 413 || res.status === 429) {
+          const detail = await httpError(res);
+          const m = /Limit (\d+), Requested (\d+)/i.exec(detail);
+          const fit = m ? 7000 - (Number(m[2]) - Number(m[1])) - 200 : 0;
+          if (fit < 3000) throw new Error(`${detail} (modelo ${model})`);
+          res = await send(fit);
+        }
+        if (!res.ok) throw new Error(`${await httpError(res)} (modelo ${model})`);
+        const data = (await res.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
         const out = data.choices?.[0]?.message?.content || '';
-        if (!out) throw new Error('respuesta vacía');
+        if (!out) throw new Error(`respuesta vacía (modelo ${model})`);
         return out;
       },
     });

@@ -127,7 +127,7 @@ El botón **Generar con IA** de Planificación usa Gemini de Google y, si falla,
 3. En Vercel, en **Settings → Environment Variables**, agrega `GEMINI_API_KEY` y `GROQ_API_KEY` con esas claves, marcadas para **Production**, **Preview** y **Development**. Con una sola de las dos ya funciona.
 4. Vuelve a desplegar (**Deployments → Redeploy**).
 
-Si la IA falla, el mensaje rojo trae el detalle de cada proveedor (por ejemplo, «Gemini: HTTP 400: API key not valid»). Opcional: `GEMINI_MODEL` y `GROQ_MODEL` cambian el modelo (por defecto `gemini-flash-latest` y `llama-3.3-70b-versatile`). Cada docente puede generar hasta 25 documentos por día. A la IA solo se le envían el área, el grado, el tema, la duración y las notas que escriba el docente.
+Si la IA falla, el mensaje rojo trae el detalle de cada proveedor (por ejemplo, «Gemini: HTTP 400: API key not valid»). Opcional: `GEMINI_MODEL` y `GROQ_MODEL` cambian el modelo (por defecto `gemini-flash-latest`; en Groq se elige solo un modelo disponible en tu cuenta). Cada docente puede generar hasta 25 documentos por día. A la IA solo se le envían el área, el grado, el tema, la duración y las notas que escriba el docente.
 
 Para probarla en tu computadora con `npm run dev`, pon las mismas claves en `.env.local`.
 
