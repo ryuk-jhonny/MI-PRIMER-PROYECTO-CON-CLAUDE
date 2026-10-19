@@ -4,9 +4,9 @@ App web para colegios de **primaria y secundaria** del Perú, basada en el **Cur
 
 | Rol | Qué hace |
 |---|---|
-| **Dirección** | Registra el colegio, matricula estudiantes (uno a uno o desde Excel), imprime carnets QR y códigos de acceso, invita docentes, ve la asistencia del día, visa unidades y sesiones y publica comunicados. |
-| **Docentes de cada área** | Eligen sus áreas del CNEB, su nivel y, si quieren, sus aulas. Su panel se arma con las competencias y capacidades de sus áreas: su **horario semanal** (con su próxima clase en el inicio), notas por competencia, planificación de unidades y sesiones con lista de cotejo, actividades con retroalimentación y comunicados. Quien enseña **Educación Física** tiene además la evaluación física (peso, talla, IMC y pruebas). |
-| **Personal de puerta (auxiliar)** | Registra ingresos con el escáner QR y corrige estados de asistencia. |
+| **Dirección** | Registra el colegio, matricula estudiantes (uno a uno o desde Excel), imprime carnets QR y códigos de acceso, invita docentes y les asigna una o varias áreas, registra la asistencia de la puerta, ve la asistencia de clase de cada docente, define los bloques del horario, visa unidades y sesiones y publica comunicados. |
+| **Docentes de cada área** | Eligen sus áreas del CNEB, su nivel y, si quieren, sus aulas. Pueden enseñar varias áreas. Su panel se arma con las competencias y capacidades de sus áreas: su **horario por bloques** (con su próxima clase en el inicio), su **asistencia de clase** por área y aula (exportable a Excel), notas por competencia, planificación por bimestre (unidades con sus sesiones, cada sesión con su rúbrica), actividades con retroalimentación y comunicados. Quien enseña **Educación Física** tiene además la evaluación física (peso, talla, IMC y pruebas). |
+| **Personal de puerta (auxiliar)** | Registra los ingresos en la puerta con el escáner QR y corrige estados de asistencia. La asistencia de la puerta es solo de la dirección y este personal. |
 | **Estudiantes** | Ven sus notas por competencia, su asistencia, las actividades de sus docentes (y las responden desde el celular) y los comunicados. |
 | **Familias** | Lo mismo que el estudiante, para su hijo o hija. Sin cuenta, también pueden escanear el QR del carnet y ver la asistencia y los comunicados. |
 
@@ -74,8 +74,8 @@ npm run dev:local      # terminal 2: la app conectada a los emuladores
 |---|---|
 | `npm run lint` | Tipos de TypeScript |
 | `npm test` | Promedios CNEB, periodos, códigos, horarios, importación de nóminas, la IA de planificación (con respuestas simuladas) y el Word |
-| `npm run test:reglas` | 57 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, el carnet no entra con un PIN equivocado ni se activa dos veces, un auxiliar no pone notas, nadie lista los códigos, nadie se salta el límite diario de la IA, el portal no se puede modificar sin sesión, etc. |
-| `npm run test:e2e` | Recorre la app en Chromium: la dirección registra su colegio y matricula; una docente de Matemática se une, califica, arma su horario y genera con IA una unidad y una de sus sesiones, y la descarga en Word; la familia y el estudiante activan su carnet, entran con su PIN y ven las notas y el horario de su sección; el portal del carnet se abre sin cuenta; todo revisado también en pantalla de celular |
+| `npm run test:reglas` | 60 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, el carnet no entra con un PIN equivocado ni se activa dos veces, un auxiliar no pone notas, un docente no registra la puerta ni ve la asistencia de clase de otro docente, nadie lista los códigos, nadie se salta el límite diario de la IA, el portal no se puede modificar sin sesión, etc. |
+| `npm run test:e2e` | Recorre la app en Chromium: la dirección registra su colegio y matricula; una docente de Matemática se une, califica, arma su horario por bloques, toma y exporta la asistencia de su clase y genera con IA una unidad y una de sus sesiones (que queda dentro de la unidad, con su rúbrica) y la descarga en Word; la dirección le asigna otra área; al recargar la página se sigue dentro y en una pestaña nueva hay que volver a ingresar; la familia y el estudiante activan su carnet, entran con su PIN y ven las notas y el horario de su sección; el portal del carnet se abre sin cuenta; todo revisado también en pantalla de celular |
 | `npm run test:todo` | Todo lo anterior |
 
 ## 3. Publicar
@@ -91,6 +91,7 @@ npm run dev:local      # terminal 2: la app conectada a los emuladores
 - **Códigos de acceso.** Docentes y auxiliares se unen con un código de invitación del colegio. Cada estudiante tiene dos códigos personales: uno para su cuenta y otro para su familia. La dirección puede cambiar los códigos de invitación cuando quiera.
 - **Docentes y sus aulas.** Un docente ve solo sus áreas. Si además elige sus aulas en *Mi área CNEB*, solo ve esas aulas en Notas.
 - **Carnets seguros.** El QR lleva un código largo y aleatorio, no el DNI. Si un carnet se pierde, en *Editar estudiante → Generar QR nuevo* el anterior deja de funcionar.
+- **La sesión se cierra con la pestaña.** Al cerrar la pestaña o el navegador hay que volver a ingresar; recargar la página no cierra la sesión.
 - **Puntual o tardanza** se decide con la hora de Lima y la hora límite de Configuración (07:45 por defecto). Las inasistencias se registran al pulsar **Cerrar día**, para no poner faltas en feriados.
 - **Planificación con IA.** Gemini es la principal y Groq el respaldo. La IA arma la unidad o la sesión con la estructura del docente (situación significativa, propósito, transversales, enfoques, secuencia, evaluación, rúbrica). El docente la revisa y la edita antes de guardar. Hasta 25 generaciones por docente al día.
 - **Avisos por WhatsApp:** el botón abre WhatsApp con el mensaje ya escrito y la persona lo envía.

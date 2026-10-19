@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, BookOpenCheck, CalendarCheck, CalendarClock, ClipboardList, Clock, Compass, Megaphone, NotebookPen, PhoneOff, ScanLine, TrendingDown, UserPlus, Users, UserX } from 'lucide-react';
+import { AlertTriangle, BookOpenCheck, CalendarCheck, CalendarClock, ClipboardList, Clock, Compass, ListChecks, Megaphone, NotebookPen, PhoneOff, ScanLine, TrendingDown, UserPlus, Users, UserX } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Avatar, btn, Card, PageHeader, Stat } from './ui';
 import { levelOf } from '../lib/school';
@@ -45,7 +45,9 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
         subtitle={`${dateLabel.charAt(0).toUpperCase()}${dateLabel.slice(1)} · Ingreso puntual hasta las ${config.punctualCutoffTime}`}
         actions={
           <>
-            <button type="button" onClick={() => ctx.go('asistencia')} className={btn.primary}><ScanLine className="w-5 h-5" /> Escanear ingresos</button>
+            {role === 'docente'
+              ? <button type="button" onClick={() => ctx.go('clase')} className={btn.primary}><ListChecks className="w-5 h-5" /> Tomar asistencia de clase</button>
+              : <button type="button" onClick={() => ctx.go('asistencia')} className={btn.primary}><ScanLine className="w-5 h-5" /> Escanear ingresos</button>}
             {isDirector && <button type="button" onClick={() => ctx.go('comunicados')} className={btn.secondary}><Megaphone className="w-4 h-4" /> Comunicado</button>}
           </>
         }
@@ -53,6 +55,7 @@ export default function HomeTab({ ctx }: { ctx: PanelCtx }) {
 
       {role === 'docente' && next && (
         <NextClassCard next={next} actions={<>
+          <button type="button" onClick={() => ctx.go('clase')} className={btn.secondary}><ListChecks className="w-4 h-4" /> Asistencia</button>
           <button type="button" onClick={() => ctx.go('notas')} className={btn.secondary}><BookOpenCheck className="w-4 h-4" /> Notas</button>
           <button type="button" onClick={() => ctx.go('horario')} className={btn.secondary}><CalendarClock className="w-4 h-4" /> Mi horario</button>
         </>} />

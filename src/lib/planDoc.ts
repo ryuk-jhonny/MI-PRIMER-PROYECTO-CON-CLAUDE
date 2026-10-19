@@ -140,3 +140,16 @@ export function longDate(iso: string): string {
   const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   return `${d} de ${months[m - 1]} del ${y}`;
 }
+
+/** Fila de rúbrica armada a partir de un criterio, para que el docente la ajuste. */
+export function rubricaDesde(criterio: string): RubricaFila {
+  const c = criterio.trim().replace(/\.$/, '');
+  const low = c.charAt(0).toLowerCase() + c.slice(1);
+  return {
+    criterio: c,
+    destacado: `${c} con autonomía y va más allá de lo esperado.`,
+    esperado: `${c}.`,
+    proceso: `${c} con ayuda o de forma parcial.`,
+    inicio: `Aún no ${low}; necesita acompañamiento.`,
+  };
+}

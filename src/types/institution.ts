@@ -1,4 +1,5 @@
 import type { Level } from '../lib/cneb';
+import { BellConfig, DEFAULT_BELL } from '../lib/schedule';
 
 export type EducationalLevel = Level;
 export type AcademicPeriodType = 'bimestral' | 'trimestral';
@@ -35,6 +36,8 @@ export interface InstitutionConfig {
   gradeConfigs: GradeSectionConfig[];
   /** Zona horaria usada para decidir Puntual / Tardanza. */
   timeZone?: string;
+  /** Bloques de clase de la jornada (horas pedagógicas y recreos). */
+  bell?: BellConfig;
 }
 
 const ORD = ['1ro', '2do', '3ro', '4to', '5to', '6to'];
@@ -66,6 +69,7 @@ export const DEFAULT_INSTITUTION_CONFIG: InstitutionConfig = {
   lateCutoffTime: '08:15',
   gradeConfigs: DEFAULT_GRADE_CONFIGS,
   timeZone: 'America/Lima',
+  bell: DEFAULT_BELL,
 };
 
 export interface DirectorProfile {

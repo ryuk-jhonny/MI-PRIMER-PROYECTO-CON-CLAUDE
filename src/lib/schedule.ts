@@ -10,6 +10,9 @@ export interface ClassBlock {
   end: string; // "08:45"
   aula: string; // "3ro Primaria · A"
   area: string;
+  /** Bloque donde empieza (1 = primer bloque) y cuántos bloques dura. */
+  bloque?: number;
+  bloques?: number;
 }
 
 export interface TeacherSchedule {
@@ -81,7 +84,49 @@ export function nextClass<T extends ClassBlock>(blocks: T[], now: { day: number;
   return { block: later, current: false, today: later.day === now.day };
 }
 
-/** Horas distintas de inicio, para armar las filas de la grilla semanal. */
-export function timeRows(blocks: ClassBlock[]): string[] {
-  return [...new Set(blocks.map((b) => `${b.start}–${b.end}`))].sort();
+// ----- Bloques del colegio (horas pedagógicas) -----
+
+/** Cómo se reparte la jornada: hora de entrada, minutos por bloque, cuántos bloques y los recreos. */
+export interface BellConfig {
+  start: string;
+  minutes: number;
+  count: number;
+  breaks: { after: number; minutes: number }[];
 }
+
+export const DEFAULT_BELL: BellConfig = { start: '08:00', minutes: 45, count: 8, breaks: [{ after: 4, minutes: 30 }] };
+
+export interface Slot { n: number; start: string; end: string; recreo?: boolean }
+
+const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/** Filas de la jornada: los bloques numerados y los recreos entre ellos. */
+export function bellSlots(bell: BellConfig = DEFAULT_BELL): Slot[] {
+  const out: Slot[] = [];
+  let t = /^\d{2}:\d{2}$/.test(bell.start) ? mins(bell.start) : 480;
+  const len = Math.min(Math.max(Math.round(bell.minutes) || 45, 10), 120);
+  const count = Math.min(Math.max(Math.round(bell.count) || 8, 1), 14);
+  for (let n = 1; n <= count; n++) {
+    out.push({ n, start: hhmm(t), end: hhmm(t + len) });
+    t += len;
+    const br = bell.breaks.find((b) => b.after === n && b.minutes > 0);
+    if (br && n < count) { out.push({ n: 0, start: hhmm(t), end: hhmm(t + br.minutes), recreo: true }); t += br.minutes; }
+  }
+  return out;
+}
+
+/** Horas de una clase que empieza en el bloque `from` y dura `count` bloques. */
+export function blockTimes(slots: Slot[], from: number, count: number): { start: string; end: string } | null {
+  const first = slots.find((s) => s.n === from);
+  const last = slots.find((s) => s.n === from + count - 1);
+  return first && last ? { start: first.start, end: last.end } : null;
+}
+
+/** Bloques que ocupa una clase guardada (sirve también para horarios hechos con horas sueltas). */
+export function blockRange(b: ClassBlock, slots: Slot[]): { from: number; count: number } | null {
+  const hit = slots.filter((s) => !s.recreo && mins(s.start) < mins(b.end) && mins(b.start) < mins(s.end));
+  if (!hit.length) return null;
+  return { from: hit[0].n, count: hit[hit.length - 1].n - hit[0].n + 1 };
+}
+
+export const blockLabel = (from: number, count: number) => (count > 1 ? `Bloques ${from}–${from + count - 1}` : `Bloque ${from}`);

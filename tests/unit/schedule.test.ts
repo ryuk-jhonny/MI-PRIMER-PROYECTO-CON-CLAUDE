@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockError, ClassBlock, conflicts, nextClass, nowIn, OwnedBlock } from '../../src/lib/schedule';
+import { bellSlots, blockError, blockRange, blockTimes, ClassBlock, conflicts, nextClass, nowIn, OwnedBlock } from '../../src/lib/schedule';
 
 const b = (id: string, day: number, start: string, end: string, aula = '3ro Primaria · A', area = 'Matemática'): ClassBlock =>
   ({ id, day: day as ClassBlock['day'], start, end, aula, area });
@@ -36,5 +36,15 @@ describe('horario', () => {
   it('usa la hora del colegio', () => {
     // 2026-10-19 13:30 UTC es lunes 08:30 en Lima.
     expect(nowIn('America/Lima', new Date('2026-10-19T13:30:00Z'))).toEqual({ day: 1, time: '08:30' });
+  });
+
+  it('arma los bloques del colegio con su recreo', () => {
+    const slots = bellSlots({ start: '08:00', minutes: 45, count: 6, breaks: [{ after: 3, minutes: 20 }] });
+    expect(slots.map((x) => (x.recreo ? 'R' : x.n))).toEqual([1, 2, 3, 'R', 4, 5, 6]);
+    expect(slots[3]).toMatchObject({ start: '10:15', end: '10:35' });
+    expect(blockTimes(slots, 3, 2)).toEqual({ start: '09:30', end: '11:20' });
+    expect(blockTimes(slots, 6, 2)).toBeNull();
+    expect(blockRange(b('1', 1, '09:30', '11:20'), slots)).toEqual({ from: 3, count: 2 });
+    expect(blockRange(b('1', 1, '15:00', '15:45'), slots)).toBeNull();
   });
 });

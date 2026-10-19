@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Building2, Clock, Layers, Save, UserRound } from 'lucide-react';
+import { Building2, CalendarClock, Clock, Layers, Save, UserRound } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { InstitutionConfig, DirectorProfile } from '../types/institution';
 import { Level, LEVEL_LABEL, LEVELS } from '../lib/cneb';
 import { periodNames } from '../lib/school';
+import { BellConfig, bellSlots, DEFAULT_BELL } from '../lib/schedule';
 import { btn, Card, input, label, PageHeader } from './ui';
 
 export default function SettingsTab({ ctx }: { ctx: PanelCtx }) {
@@ -31,6 +32,13 @@ export default function SettingsTab({ ctx }: { ctx: PanelCtx }) {
   };
 
   const periods = periodNames(cfg);
+  const bell = cfg.bell || DEFAULT_BELL;
+  const setBell = (patch: Partial<BellConfig>) => set('bell', { ...bell, ...patch });
+  const setBreak = (i: number, patch: Partial<BellConfig['breaks'][number]>) => {
+    const list = [0, 1].map((k) => bell.breaks[k] || { after: 0, minutes: 15 });
+    list[i] = { ...list[i], ...patch };
+    setBell({ breaks: list.filter((b) => b.after > 0) });
+  };
 
   return (
     <div className="space-y-6 stagger">
@@ -83,6 +91,38 @@ export default function SettingsTab({ ctx }: { ctx: PanelCtx }) {
           </div>
         </div>
         <p className="text-xs text-slate-500">Quien llega hasta la hora “Puntual hasta” (incluida) queda como puntual; después, como tardanza. Se usa la hora de Lima.</p>
+      </Card>
+
+      <Card className="p-5 sm:p-6 space-y-4">
+        <h2 className="font-bold text-white flex items-center gap-2"><CalendarClock className="w-5 h-5 text-orange-400" /> Bloques de clase</h2>
+        <p className="text-sm text-slate-400">Los docentes arman su horario eligiendo estos bloques (horas pedagógicas).</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div><label className={label} htmlFor="bl-start">Inicio de clases</label><input id="bl-start" type="time" value={bell.start} onChange={(e) => setBell({ start: e.target.value })} className={input} /></div>
+          <div><label className={label} htmlFor="bl-min">Minutos por bloque</label><input id="bl-min" type="number" min={10} max={120} value={bell.minutes} onChange={(e) => setBell({ minutes: Number(e.target.value) })} className={input} /></div>
+          <div><label className={label} htmlFor="bl-count">Bloques por día</label><input id="bl-count" type="number" min={1} max={14} value={bell.count} onChange={(e) => setBell({ count: Number(e.target.value) })} className={input} /></div>
+          {[0, 1].map((i) => {
+            const br = bell.breaks[i] || { after: 0, minutes: 15 };
+            return (
+              <div key={i} className="col-span-2 sm:col-span-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className={label} htmlFor={`bl-br${i}`}>{i === 0 ? 'Recreo' : 'Segundo recreo'} después del bloque</label>
+                  <select id={`bl-br${i}`} value={br.after} onChange={(e) => setBreak(i, { after: Number(e.target.value) })} className={input}>
+                    <option value={0}>Sin recreo</option>
+                    {Array.from({ length: Math.max(bell.count - 1, 0) }, (_, k) => k + 1).map((k) => <option key={k} value={k}>{k}.º bloque</option>)}
+                  </select>
+                </div>
+                <div><label className={label} htmlFor={`bl-brm${i}`}>Minutos de recreo</label><input id={`bl-brm${i}`} type="number" min={5} max={90} value={br.minutes} disabled={!br.after} onChange={(e) => setBreak(i, { minutes: Number(e.target.value) })} className={input} /></div>
+              </div>
+            );
+          })}
+        </div>
+        <ol className="flex flex-wrap gap-2 text-xs">
+          {bellSlots(bell).map((x) => (
+            <li key={`${x.start}${x.n}`} className={`px-2.5 py-1 rounded-lg border ${x.recreo ? 'border-sky-500/30 bg-sky-500/10 text-sky-200' : 'border-slate-700 bg-slate-950 text-slate-300'}`}>
+              {x.recreo ? 'Recreo' : `${x.n}.º`} {x.start}–{x.end}
+            </li>
+          ))}
+        </ol>
       </Card>
 
       <Card className="p-5 sm:p-6 space-y-4">
