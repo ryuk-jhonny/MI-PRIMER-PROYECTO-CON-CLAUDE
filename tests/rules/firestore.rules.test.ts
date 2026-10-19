@@ -146,6 +146,14 @@ describe('Perfiles', () => {
   it('cada docente ajusta su propia carga', async () => {
     await assertSucceeds(updateDoc(doc(db('doc'), 'users', 'doc'), { areas: ['Matemática', 'Ciencia y Tecnología'], aulas: ['1° A'] }));
   });
+  it('la dirección asigna áreas a sus docentes, y nada más', async () => {
+    await assertSucceeds(updateDoc(doc(db('dir'), 'users', 'doc'), { areas: ['Matemática', 'Educación Física'], levels: ['secundaria'], aulas: [] }));
+    await assertFails(updateDoc(doc(db('dir'), 'users', 'doc'), { fullName: 'Otro nombre' }));
+    await assertFails(updateDoc(doc(db('dir'), 'users', 'doc'), { role: 'director' }));
+    await assertFails(updateDoc(doc(db('dir'), 'users', 'aux'), { areas: ['Matemática'] }));
+    await assertFails(updateDoc(doc(db('dir2'), 'users', 'doc'), { areas: ['Arte y Cultura'] }));
+    await assertFails(updateDoc(doc(db('aux'), 'users', 'doc'), { areas: ['Arte y Cultura'] }));
+  });
   it('la familia no se vincula a otros hijos desde su cuenta de carnet', async () => {
     await assertFails(updateDoc(doc(db('fam'), 'users', 'fam'), { studentIds: arrayUnion(SID2), linkCode: 'FAMILIA2' }));
     await assertFails(updateDoc(doc(db('fam'), 'users', 'fam'), { studentIds: arrayUnion(SID2), linkCode: 'ESTUDIA1' }));
@@ -242,6 +250,8 @@ describe('Asistencia', () => {
     const att = (uid: string, id: string) => setDoc(doc(db(uid), 'institutions', IID, 'attendance', id), { studentId: SID, day: '2026-03-11', status: 'Puntual' });
     await assertSucceeds(att('aux', `2026-03-11_${SID}`));
     await assertFails(att('aux', 'otro-id'));
+    // La puerta es de la dirección y el personal de servicio, no de los docentes.
+    await assertFails(att('doc', `2026-03-11_${SID2}`));
     await assertFails(att('fam', `2026-03-12_${SID}`));
   });
   it('solo dirección y auxiliar corrigen el estado', async () => {
@@ -249,6 +259,36 @@ describe('Asistencia', () => {
     await assertSucceeds(updateDoc(doc(db('aux'), 'institutions', IID, 'attendance', id), { status: 'Justificada', editedBy: 'aux', editedAt: 'x' }));
     await assertFails(updateDoc(doc(db('doc'), 'institutions', IID, 'attendance', id), { status: 'Puntual', editedBy: 'doc', editedAt: 'x' }));
     await assertFails(updateDoc(doc(db('aux'), 'institutions', IID, 'attendance', id), { studentId: SID2 }));
+  });
+});
+
+describe('Asistencia de clase', () => {
+  const rec = (uid: string, extra: Record<string, unknown> = {}) => ({
+    ownerUid: uid, ownerName: uid, area: 'Matemática', aula: '1ro Primaria · A', day: '2026-03-11', marks: { [SID]: 'P', [SID2]: 'F' }, updatedAt: 'x', ...extra,
+  });
+  const ref = (fs: Firestore, id: string) => doc(fs, 'institutions', IID, 'classAttendance', id);
+  const ID = 'doc_2026-03-11_matematica_1ro-primaria-a';
+
+  it('cada docente registra la suya, con su id', async () => {
+    await assertSucceeds(setDoc(ref(db('doc'), ID), rec('doc')));
+    await assertSucceeds(setDoc(ref(db('doc'), ID), rec('doc', { marks: { [SID]: 'T' } })));
+    await assertFails(setDoc(ref(db('doc'), 'dir_2026-03-11_x'), rec('doc')));
+    await assertFails(setDoc(ref(db('doc'), ID), rec('dir')));
+    await assertFails(setDoc(ref(db('doc'), ID), rec('doc', { extra: 1 })));
+    await assertFails(setDoc(ref(db('aux'), 'aux_2026-03-11_x'), rec('aux')));
+    await assertFails(setDoc(ref(db('est'), 'est_2026-03-11_x'), rec('est')));
+  });
+  it('la ve su docente y la dirección; nadie más', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(ref(ctx.firestore() as unknown as Firestore, ID), rec('doc')); });
+    const list = (fs: Firestore) => getDocs(query(collection(fs, 'institutions', IID, 'classAttendance'), where('ownerUid', '==', 'doc')));
+    await assertSucceeds(getDoc(ref(db('doc'), ID)));
+    await assertSucceeds(list(db('doc')));
+    await assertSucceeds(getDocs(collection(db('dir'), 'institutions', IID, 'classAttendance')));
+    await assertFails(getDocs(collection(db('doc'), 'institutions', IID, 'classAttendance')));
+    await assertFails(getDoc(ref(db('aux'), ID)));
+    await assertFails(getDoc(ref(db('est'), ID)));
+    await assertFails(getDoc(ref(db('dir2'), ID)));
+    await assertFails(setDoc(ref(db('dir'), ID), rec('dir')));
   });
 });
 

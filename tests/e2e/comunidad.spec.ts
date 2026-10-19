@@ -132,6 +132,8 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   await expect(nav.getByRole('button', { name: 'Configuración' })).toHaveCount(0);
   // Sin Educación Física no aparece la evaluación física.
   await expect(nav.getByRole('button', { name: 'Evaluación física' })).toHaveCount(0);
+  // La asistencia de la puerta es de la dirección y el personal de servicio.
+  await expect(nav.getByRole('button', { name: 'Asistencia QR' })).toHaveCount(0);
 
   await nav.getByRole('button', { name: 'Mi área CNEB' }).click();
   await expect(page.getByText(/Resuelve problemas de cantidad/).first()).toBeVisible();
@@ -149,8 +151,9 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   await page.getByRole('button', { name: 'Agregar mi primera clase' }).click();
   const sheet = page.getByRole('dialog', { name: 'Agregar clase' });
   await sheet.getByLabel('Día').selectOption({ label: 'Lunes' });
-  await sheet.getByLabel('Hora de inicio').fill('08:00');
-  await sheet.getByLabel('Hora de fin').fill('08:45');
+  await sheet.getByLabel('Bloque de inicio').selectOption({ label: '1.º · 08:00' });
+  await sheet.getByLabel('Cantidad de bloques').selectOption({ label: '2 bloques' });
+  await expect(sheet.getByText('Bloques 1–2: de 08:00 a 09:30.')).toBeVisible();
   await sheet.getByLabel('Aula').selectOption({ label: '1ro Primaria · A' });
   await sheet.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Clase agregada a tu horario.')).toBeVisible();
@@ -159,14 +162,34 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   await page.getByRole('button', { name: 'Agregar clase' }).click();
   const again = page.getByRole('dialog', { name: 'Agregar clase' });
   await again.getByLabel('Día').selectOption({ label: 'Lunes' });
-  await again.getByLabel('Hora de inicio').fill('08:30');
-  await again.getByLabel('Hora de fin').fill('09:15');
+  await again.getByLabel('Bloque de inicio').selectOption({ label: '2.º · 08:45' });
   await again.getByRole('button', { name: 'Guardar' }).click();
   await expect(again.getByRole('alert')).toContainText(/Se cruza/);
   await again.getByRole('button', { name: 'Cancelar' }).click();
 
+  // La grilla va por bloques: la clase ocupa el 1.º y el 2.º, y aparece el recreo.
+  await expect(page.getByRole('rowheader', { name: /^1\.º/ })).toBeVisible();
+  await expect(page.getByRole('rowheader', { name: /^Recreo/ })).toBeVisible();
+  await expect(page.getByRole('cell', { name: /Matemática/ })).toHaveAttribute('rowspan', '2');
+
   await nav.getByRole('button', { name: 'Inicio' }).click();
   await expect(page.getByText(/^(Ahora en clase|Tu próxima clase)/)).toBeVisible();
+
+  // Toma la asistencia de su clase y la exporta, solo de su área.
+  await nav.getByRole('button', { name: 'Asistencia de clase' }).click();
+  await page.getByLabel('Área').selectOption({ label: 'Matemática' });
+  await page.getByLabel('Aula').selectOption({ label: '1ro Primaria · A' });
+  await page.getByRole('button', { name: 'Todos presentes' }).click();
+  await page.getByRole('button', { name: `${STUDENT}: Tarde` }).click();
+  await page.getByRole('button', { name: 'Guardar asistencia' }).click();
+  await expect(page.getByText('Asistencia de clase guardada.')).toBeVisible();
+  await expect(page.getByText('1 clase registrada')).toBeVisible();
+  const csv = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Exportar aula (Excel)' }).click();
+  expect((await csv).suggestedFilename()).toBe('asistencia_Matematica_1ro_Primaria_A.csv');
+  const one = page.waitForEvent('download');
+  await page.getByRole('button', { name: `Exportar asistencia de ${STUDENT}` }).click();
+  expect((await one).suggestedFilename()).toMatch(/^asistencia_Matematica_Quispe/);
 
   // Planifica con IA (en las pruebas responde un documento de ejemplo): unidad, una de sus sesiones y el Word.
   await nav.getByRole('button', { name: 'Planificación' }).click();
@@ -189,7 +212,17 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   await ses.getByRole('button', { name: 'Guardar' }).click();
   await expect(page.getByText('Documento guardado.').first()).toBeVisible();
 
+  // La sesión queda dentro de su unidad, en el bimestre de la unidad, con su rúbrica.
+  const bimestre = page.getByRole('region', { name: 'Bimestre I' });
+  await expect(bimestre).toContainText('Aprendemos Fracciones en el mercado');
+  await expect(bimestre).toContainText('1 sesión');
   const card = page.locator('section').filter({ hasText: 'Sesión 1 de Fracciones en el mercado' }).last();
+  await card.getByRole('button', { name: 'Rúbrica' }).click();
+  const rub = page.getByRole('dialog', { name: 'Rúbrica de evaluación' });
+  await expect(rub.getByText(STUDENT)).toBeVisible();
+  await expect(rub.getByText('Logro destacado (4)')).toBeVisible();
+  await rub.getByRole('button', { name: 'Cerrar' }).click();
+
   await card.getByRole('button', { name: 'Ver' }).click();
   const docView = page.getByRole('dialog', { name: 'Sesión 1 de Fracciones en el mercado' });
   await expect(docView.getByText('SESIÓN DE APRENDIZAJE 01 UNIDAD 1')).toBeVisible();
@@ -245,7 +278,7 @@ test('el estudiante activa su carnet y vuelve a entrar con el QR y su PIN', asyn
   // Ve el horario de su sección, armado por sus docentes.
   await page.getByRole('button', { name: 'Ver semana' }).click();
   const week = page.getByRole('dialog', { name: /Horario de 1ro Primaria/ });
-  await expect(week.getByRole('region', { name: 'Lunes' })).toContainText('Matemática');
+  await expect(week.getByRole('cell', { name: /Matemática/ })).toBeVisible();
   await noHorizontalScroll(page);
   await week.getByRole('button', { name: 'Cerrar' }).last().click();
 
@@ -301,5 +334,28 @@ test('el panel de la dirección funciona en celular', async ({ browser }) => {
   await menu.getByRole('button', { name: 'Equipo docente' }).click();
   await expect(page.getByText('Carmen Docente')).toBeVisible();
   await noHorizontalScroll(page);
+
+  // La dirección le asigna una segunda área a la docente.
+  await page.getByRole('button', { name: 'Editar áreas de Carmen Docente' }).click();
+  const load = page.getByRole('dialog', { name: 'Carga docente de Carmen Docente' });
+  await load.getByRole('button', { name: 'Comunicación', exact: true }).click();
+  await load.getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByText('Áreas de Carmen Docente guardadas.')).toBeVisible();
+  await expect(page.getByText('Comunicación', { exact: true }).first()).toBeVisible();
+
+  // Ve la asistencia de clase de sus docentes.
+  await page.getByRole('button', { name: 'Abrir menú' }).click();
+  await page.getByRole('dialog', { name: 'Menú' }).getByRole('button', { name: 'Asistencia de clase' }).click();
+  await expect(page.getByRole('heading', { name: 'Asistencia de clase' })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Área' }).selectOption({ label: 'Matemática' });
+  await page.getByRole('combobox', { name: 'Aula' }).selectOption({ label: '1ro Primaria · A' });
+  await expect(page.getByText('1 clase registrada')).toBeVisible();
+
+  // Al recargar sigue dentro; en una pestaña nueva tiene que volver a ingresar.
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Asistencia de clase' })).toBeVisible();
+  const tab = await page.context().newPage();
+  await tab.goto('/app');
+  await expect(tab.getByRole('heading', { name: 'Ingresa a tu colegio' })).toBeVisible();
   await page.context().close();
 });

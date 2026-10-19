@@ -5,8 +5,8 @@ rules_version = '2';
 // Cada colegio vive en institutions/{iid}. Solo entran las personas cuyo perfil
 // (users/{uid}) apunta a ese colegio, y cada rol ve y cambia solo lo que le toca:
 //   director   → todo su colegio
-//   docente    → estudiantes y notas, su planificación, sus actividades
-//   auxiliar   → estudiantes y asistencia
+//   docente    → estudiantes y notas, su asistencia de clase, su planificación, sus actividades
+//   auxiliar   → estudiantes y asistencia de la puerta
 //   estudiante → solo su ficha, sus notas, su asistencia y sus actividades
 //   familia    → lo mismo que el estudiante, para su hijo o hija
 // Estudiantes y familias entran solo con el carnet QR y un PIN (carnetToken en su perfil).
@@ -88,9 +88,13 @@ service cloud.firestore {
         && (request.resource.data.role in ['estudiante', 'familia']
           || !request.resource.data.keys().hasAny(['carnetToken', 'pinProof']));
 
-      allow update: if signedIn() && request.auth.uid == uid && (
+      allow update: if signedIn() && (
         // Datos propios: nombre, teléfono y carga docente.
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'phone', 'areas', 'levels', 'aulas'])
+        (request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'phone', 'areas', 'levels', 'aulas']))
+        // La dirección asigna las áreas, niveles y aulas de los docentes de su colegio.
+        || (resource.data.role == 'docente' && resource.data.institutionId == me().institutionId && me().role == 'director'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['areas', 'levels', 'aulas']))
       );
 
       // La dirección puede quitar el acceso a otras personas de su colegio.
@@ -178,10 +182,24 @@ service cloud.firestore {
 
       match /attendance/{rid} {
         allow read: if staff(iid) || linked(iid, resource.data.studentId);
-        allow create: if staff(iid) && rid == request.resource.data.day + '_' + request.resource.data.studentId;
+        // La asistencia de la puerta la registran solo la dirección y el personal de servicio.
+        allow create: if roleIn(iid, ['director', 'auxiliar']) && rid == request.resource.data.day + '_' + request.resource.data.studentId;
         allow update: if roleIn(iid, ['director', 'auxiliar'])
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'editedBy', 'editedAt']);
         allow delete: if director(iid);
+      }
+
+      // Asistencia de clase: cada docente registra y ve solo la suya ({uid}_{día}_{área}_{aula}); la dirección ve todas.
+      match /classAttendance/{rid} {
+        allow read: if director(iid) || (teacher(iid) && resource.data.ownerUid == request.auth.uid);
+        allow create, update: if teacher(iid)
+          && rid.split('_')[0] == request.auth.uid
+          && request.resource.data.ownerUid == request.auth.uid
+          && (resource == null || resource.data.ownerUid == request.auth.uid)
+          && request.resource.data.keys().hasOnly(['ownerUid', 'ownerName', 'area', 'aula', 'day', 'marks', 'updatedAt'])
+          && request.resource.data.day is string && request.resource.data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && request.resource.data.marks is map && request.resource.data.marks.size() <= 200;
+        allow delete: if teacher(iid) && resource.data.ownerUid == request.auth.uid;
       }
 
       match /announcements/{aid} {

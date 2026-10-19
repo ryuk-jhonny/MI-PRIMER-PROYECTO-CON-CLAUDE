@@ -3,6 +3,7 @@ import { Activity, BookOpenCheck, ChevronDown, ClipboardList, Compass, Layers, N
 import type { PanelCtx } from './Panel';
 import { AREAS, areaInfo, CICLO_INFO, Ciclo, COMPETENCIAS, competenciasOf, ENFOQUES_TRANSVERSALES, Level, LEVEL_LABEL, LEVELS, TRANSVERSALES } from '../lib/cneb';
 import { activePeriodIndex, aulaOf, findGrade, levelOf, periodCount, unitsOf } from '../lib/school';
+import type { UserProfile } from '../lib/store';
 import { btn, Card, Empty, PageHeader } from './ui';
 
 export default function AreaTab({ ctx }: { ctx: PanelCtx }) {
@@ -139,10 +140,30 @@ export default function AreaTab({ ctx }: { ctx: PanelCtx }) {
 }
 
 function LoadEditor({ ctx, onDone }: { ctx: PanelCtx; onDone: () => void }) {
-  const { me, students, config } = ctx;
-  const [levels, setLevels] = useState<Level[]>(me.levels?.length ? me.levels : (config.activeLevels as Level[]));
-  const [areas, setAreas] = useState<string[]>(me.areas || []);
-  const [aulas, setAulas] = useState<string[]>(me.aulas || []);
+  const { me } = ctx;
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Mi carga docente" subtitle="Con esto se arma tu panel: competencias, notas, planificación y herramientas de tus áreas. Puedes elegir más de un área." />
+      <Card className="p-5 sm:p-6">
+        <LoadForm ctx={ctx} initial={me} onCancel={me.areas?.length ? onDone : undefined}
+          onSave={async (patch) => { await ctx.updateMe(patch); onDone(); }} />
+      </Card>
+    </div>
+  );
+}
+
+/** Niveles, áreas (una o varias) y aulas de un docente. Lo usa el docente y también la dirección. */
+export function LoadForm({ ctx, initial, onSave, onCancel, who = 'yo' }: {
+  ctx: PanelCtx;
+  initial: Pick<UserProfile, 'levels' | 'areas' | 'aulas'>;
+  onSave: (patch: { levels: Level[]; areas: string[]; aulas: string[] }) => Promise<void>;
+  onCancel?: () => void;
+  who?: 'yo' | 'docente';
+}) {
+  const { students, config } = ctx;
+  const [levels, setLevels] = useState<Level[]>(initial.levels?.length ? initial.levels : (config.activeLevels as Level[]));
+  const [areas, setAreas] = useState<string[]>(initial.areas || []);
+  const [aulas, setAulas] = useState<string[]>(initial.aulas || []);
   const [busy, setBusy] = useState(false);
   const allAulas = [...new Set(students.filter((s) => levels.includes(levelOf(s))).map(aulaOf))].sort();
   const options = AREAS.filter((a) => levels.some((l) => a.competencias[l]?.length));
@@ -152,35 +173,32 @@ function LoadEditor({ ctx, onDone }: { ctx: PanelCtx; onDone: () => void }) {
   const save = async () => {
     setBusy(true);
     const keep = areas.filter((a) => options.some((o) => o.name === a));
-    await ctx.updateMe({ levels, areas: keep, aulas: aulas.filter((a) => allAulas.includes(a)) });
+    await onSave({ levels, areas: keep, aulas: aulas.filter((a) => allAulas.includes(a)) });
     setBusy(false);
-    onDone();
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Mi carga docente" subtitle="Con esto se arma tu panel: competencias, notas, planificación y herramientas de tus áreas." />
-      <Card className="p-5 sm:p-6 space-y-6">
-        <fieldset>
-          <legend className="text-sm font-bold text-white mb-2">Niveles</legend>
-          <div className="flex gap-2 flex-wrap">{LEVELS.map((l) => <button key={l} type="button" aria-pressed={levels.includes(l)} onClick={() => setLevels(toggle(levels, l))} className={chip(levels.includes(l))}>{LEVEL_LABEL[l]}</button>)}</div>
-        </fieldset>
-        <fieldset>
-          <legend className="text-sm font-bold text-white mb-2">Áreas que enseño</legend>
-          <div className="flex gap-2 flex-wrap">{options.map((a) => <button key={a.name} type="button" aria-pressed={areas.includes(a.name)} onClick={() => setAreas(toggle(areas, a.name))} className={chip(areas.includes(a.name))}>{a.name}</button>)}</div>
-        </fieldset>
-        <fieldset>
-          <legend className="text-sm font-bold text-white mb-1">Aulas a mi cargo <span className="font-normal text-slate-400">(opcional)</span></legend>
-          <p className="text-xs text-slate-400 mb-2">Si no eliges ninguna, verás todas las aulas de tus niveles.</p>
-          {allAulas.length === 0 ? <p className="text-sm text-slate-500">Aún no hay aulas con estudiantes.</p> : (
-            <div className="flex gap-2 flex-wrap">{allAulas.map((a) => <button key={a} type="button" aria-pressed={aulas.includes(a)} onClick={() => setAulas(toggle(aulas, a))} className={chip(aulas.includes(a))}>{a}</button>)}</div>
-          )}
-        </fieldset>
-        <div className="flex justify-end gap-2">
-          {me.areas?.length ? <button type="button" onClick={onDone} className={btn.ghost}>Cancelar</button> : null}
-          <button type="button" onClick={save} disabled={busy || !areas.length || !levels.length} className={btn.primary}><Save className="w-4 h-4" /> Guardar</button>
-        </div>
-      </Card>
+      <fieldset>
+        <legend className="text-sm font-bold text-white mb-2">Niveles</legend>
+        <div className="flex gap-2 flex-wrap">{LEVELS.map((l) => <button key={l} type="button" aria-pressed={levels.includes(l)} onClick={() => setLevels(toggle(levels, l))} className={chip(levels.includes(l))}>{LEVEL_LABEL[l]}</button>)}</div>
+      </fieldset>
+      <fieldset>
+        <legend className="text-sm font-bold text-white mb-1">{who === 'yo' ? 'Áreas que enseño' : 'Áreas que enseña'}</legend>
+        <p className="text-xs text-slate-400 mb-2">Marca todas las que correspondan.</p>
+        <div className="flex gap-2 flex-wrap">{options.map((a) => <button key={a.name} type="button" aria-pressed={areas.includes(a.name)} onClick={() => setAreas(toggle(areas, a.name))} className={chip(areas.includes(a.name))}>{a.name}</button>)}</div>
+      </fieldset>
+      <fieldset>
+        <legend className="text-sm font-bold text-white mb-1">{who === 'yo' ? 'Aulas a mi cargo' : 'Aulas a su cargo'} <span className="font-normal text-slate-400">(opcional)</span></legend>
+        <p className="text-xs text-slate-400 mb-2">Sin aulas elegidas se ven todas las aulas de los niveles marcados.</p>
+        {allAulas.length === 0 ? <p className="text-sm text-slate-500">Aún no hay aulas con estudiantes.</p> : (
+          <div className="flex gap-2 flex-wrap">{allAulas.map((a) => <button key={a} type="button" aria-pressed={aulas.includes(a)} onClick={() => setAulas(toggle(aulas, a))} className={chip(aulas.includes(a))}>{a}</button>)}</div>
+        )}
+      </fieldset>
+      <div className="flex justify-end gap-2">
+        {onCancel && <button type="button" onClick={onCancel} className={btn.ghost}>Cancelar</button>}
+        <button type="button" onClick={save} disabled={busy || !areas.length || !levels.length} className={btn.primary}><Save className="w-4 h-4" /> Guardar</button>
+      </div>
     </div>
   );
 }

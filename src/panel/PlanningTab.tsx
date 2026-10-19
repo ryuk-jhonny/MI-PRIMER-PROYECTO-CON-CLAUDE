@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, Copy, FilePlus2, ListOrdered, MessageSquareWarning, NotebookPen, Pencil, Printer, Send, Sparkles, Trash2, X } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Copy, FilePlus2, Grid3x3, ListOrdered, MessageSquareWarning, NotebookPen, Pencil, Plus, Printer, Send, Sparkles, Trash2, X } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Plan, PlanStatus } from '../lib/store';
 import { friendlyError } from '../lib/firebase';
@@ -7,7 +7,8 @@ import { areaInfo, cicloOf, competenciasOf, ENFOQUES_TRANSVERSALES, gradeNumber,
 import { aulaOf, periodNames } from '../lib/school';
 import { Badge, btn, Card, Empty, input, label, Modal, PageHeader, textarea } from './ui';
 import { withDetalle } from '../lib/planAi';
-import { AiModal, cleanDetalle, DetalleEditor, DetalleView, UnitSessions, WordButton, wordInfo } from './PlanAi';
+import { AiModal, cleanDetalle, DetalleEditor, DetalleView, RubricaEditor, UnitSessions, WordButton, wordInfo } from './PlanAi';
+import { RubricaFila, rubricaDesde } from '../lib/planDoc';
 
 const STATUS_STYLE: Record<PlanStatus, string> = {
   Borrador: 'bg-slate-800 text-slate-300 border-slate-700',
@@ -25,7 +26,8 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
   const [deleting, setDeleting] = useState<Plan | null>(null);
   const [asking, setAsking] = useState(false);
   const [sessionsOf, setSessionsOf] = useState<Plan | null>(null);
-  const [kind, setKind] = useState<'todos' | Plan['kind']>('todos');
+  const [rubricOf, setRubricOf] = useState<Plan | null>(null);
+  const [period, setPeriod] = useState('');
   const [owner, setOwner] = useState('');
 
   const load = async () => {
@@ -36,7 +38,11 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
   const save = async (p: Plan, msg: string) => {
     try {
       const saved = await store.savePlan(p);
-      setPlans((l) => [saved, ...(l || []).filter((x) => x.id !== saved.id)]);
+      // Las sesiones de una unidad van en el mismo bimestre que ella.
+      const moved = saved.kind === 'unidad' ? (plans || []).filter((x) => x.unidadId === saved.id && x.period !== saved.period) : [];
+      const fixed = await Promise.all(moved.map((x) => store.savePlan({ ...x, period: saved.period })));
+      const changed = new Map([saved, ...fixed].map((x) => [x.id, x]));
+      setPlans((l) => [saved, ...(l || []).filter((x) => x.id !== saved.id).map((x) => changed.get(x.id) || x)]);
       ctx.toast(msg);
       return saved;
     } catch (err) { ctx.toast(friendlyError(err), 'error'); return null; }
@@ -49,8 +55,55 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
   };
 
   const owners = useMemo(() => [...new Map((plans || []).map((p) => [p.ownerUid, p.ownerName])).entries()], [plans]);
-  const list = (plans || []).filter((p) => (kind === 'todos' || p.kind === kind) && (!owner || p.ownerUid === owner));
+  const list = (plans || []).filter((p) => !owner || p.ownerUid === owner);
   const canWrite = isDirector || me.role === 'docente';
+  const allPeriods = [...new Set([...periodNames(ctx.config), ...list.map((p) => p.period)])].filter(Boolean);
+  const unitIds = new Set(list.filter((p) => p.kind === 'unidad').map((p) => p.id));
+  const byOrder = (a: Plan, b: Plan) => (a.detalle?.numero || 0) - (b.detalle?.numero || 0) || a.date.localeCompare(b.date) || a.title.localeCompare(b.title);
+  const sessionsOfUnit = (u: Plan) => list.filter((x) => x.kind === 'sesion' && x.unidadId === u.id).sort(byOrder);
+  const groups = allPeriods.filter((per) => !period || per === period).map((per) => ({
+    per,
+    units: list.filter((x) => x.kind === 'unidad' && x.period === per).sort(byOrder),
+    loose: list.filter((x) => x.kind === 'sesion' && x.period === per && !(x.unidadId && unitIds.has(x.unidadId))).sort(byOrder),
+  })).filter((g) => g.units.length || g.loose.length);
+  const sessionIn = (u: Plan): Plan => ({ ...newPlan(ctx, 'sesion'), area: u.area, level: u.level, grade: u.grade, section: u.section, period: u.period, unidadId: u.id });
+
+  // Tarjeta de una unidad o sesión (una función, no un componente, para no volver a montarla en cada cambio).
+  const planCard = (p: Plan, nested = false, children?: ReactNode) => {
+    const mine = p.ownerUid === me.uid;
+    return (
+      <Card key={p.id} className={`${nested ? 'p-3.5 bg-slate-950/60' : 'p-5'} flex flex-col gap-3`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-orange-300 font-semibold">{p.kind === 'unidad' ? 'Unidad de aprendizaje' : 'Sesión de aprendizaje'} · {p.area}</p>
+            <h3 className="font-bold text-white leading-snug mt-1">{p.title || 'Sin título'}</h3>
+            <p className="text-xs text-slate-400 mt-1">{p.grade}{p.section ? ` ${p.section}` : ''} · {p.period}{isDirector ? ` · ${p.ownerName}` : ''}</p>
+          </div>
+          <Badge className={STATUS_STYLE[p.status]}>{p.status}</Badge>
+        </div>
+        {p.observacion && p.status === 'Observado' && <p className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">Observación: {p.observacion}</p>}
+        <div className="flex flex-wrap gap-1.5">{p.competencias.map((id) => <span key={id} className="px-2 py-0.5 rounded-full bg-slate-800 text-[11px] text-slate-300">{id.replace('c', 'C')}</span>)}</div>
+        <div className="flex flex-wrap gap-2 mt-auto pt-2">
+          <button type="button" onClick={() => setViewing(p)} className={btn.secondary}><Printer className="w-4 h-4" /> Ver</button>
+          {p.detalle && <WordButton ctx={ctx} plan={p} />}
+          {p.kind === 'unidad' && p.detalle?.tipo === 'unidad' && mine && <button type="button" onClick={() => setSessionsOf(p)} className={btn.secondary}><ListOrdered className="w-4 h-4" /> Generar sesiones</button>}
+          {p.kind === 'sesion' && <button type="button" onClick={() => setRubricOf(p)} className={btn.secondary}><Grid3x3 className="w-4 h-4" /> Rúbrica</button>}
+          {p.kind === 'sesion' && p.instrumento === 'Lista de cotejo' && <button type="button" onClick={() => setChecklist(p)} className={btn.secondary}><ClipboardCheck className="w-4 h-4" /> Lista de cotejo</button>}
+          {mine && <button type="button" onClick={() => setEditing(p)} className={btn.ghost} aria-label="Editar"><Pencil className="w-4 h-4" /></button>}
+          {mine && <button type="button" onClick={() => setEditing({ ...p, id: '', title: `${p.title} (copia)`, status: 'Borrador', observacion: '' })} className={btn.ghost} aria-label="Duplicar"><Copy className="w-4 h-4" /></button>}
+          {mine && (p.status === 'Borrador' || p.status === 'Observado') && !isDirector && (
+            <button type="button" onClick={() => save({ ...p, status: 'Enviado' }, 'Enviado a la dirección para su revisión.')} className={btn.ghost}><Send className="w-4 h-4" /> Enviar</button>
+          )}
+          {isDirector && !mine && p.status !== 'Visado' && (
+            <button type="button" onClick={() => save({ ...p, status: 'Visado', observacion: '' }, `Visaste "${p.title}".`)} className={btn.ghost}><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Visar</button>
+          )}
+          {isDirector && !mine && <ObserveButton onObserve={(text) => save({ ...p, status: 'Observado', observacion: text }, 'Observación enviada al docente.')} />}
+          {(mine || isDirector) && <button type="button" onClick={() => setDeleting(p)} className={btn.ghost} aria-label="Eliminar"><Trash2 className="w-4 h-4 text-rose-400" /></button>}
+        </div>
+        {children}
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6 stagger">
@@ -67,13 +120,10 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
       />
 
       <div className="flex flex-col sm:flex-row gap-2">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          {(['todos', 'unidad', 'sesion'] as const).map((k) => (
-            <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={`h-10 px-4 rounded-xl text-sm font-semibold whitespace-nowrap cursor-pointer ${kind === k ? 'bg-orange-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
-              {{ todos: 'Todo', unidad: 'Unidades', sesion: 'Sesiones' }[k]}
-            </button>
-          ))}
-        </div>
+        <select value={period} onChange={(e) => setPeriod(e.target.value)} className={`${input} sm:w-64`} aria-label="Bimestre">
+          <option value="">{ctx.config.periodType === 'trimestral' ? 'Todos los trimestres' : 'Todos los bimestres'}</option>
+          {allPeriods.map((x) => <option key={x}>{x}</option>)}
+        </select>
         {isDirector && owners.length > 0 && (
           <select value={owner} onChange={(e) => setOwner(e.target.value)} className={`${input} sm:w-64 sm:ml-auto`} aria-label="Filtrar por docente">
             <option value="">Todos los docentes</option>
@@ -87,51 +137,43 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
           {isDirector ? 'Cuando tus docentes planifiquen, verás aquí sus unidades y sesiones para revisarlas.' : 'Elige competencias y capacidades de tu área, escribe los criterios y Ryuk arma el documento listo para imprimir y la lista de cotejo.'}
         </Empty>
       ) : (
-        <div className="grid md:grid-cols-2 gap-4">
-          {list.map((p) => {
-            const mine = p.ownerUid === me.uid;
-            return (
-              <Card key={p.id} className="p-5 flex flex-col gap-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-orange-300 font-semibold">{p.kind === 'unidad' ? 'Unidad de aprendizaje' : 'Sesión de aprendizaje'} · {p.area}</p>
-                    <h3 className="font-bold text-white leading-snug mt-1">{p.title || 'Sin título'}</h3>
-                    <p className="text-xs text-slate-400 mt-1">{p.grade}{p.section ? ` ${p.section}` : ''} · {p.period}{isDirector ? ` · ${p.ownerName}` : ''}</p>
-                  </div>
-                  <Badge className={STATUS_STYLE[p.status]}>{p.status}</Badge>
+        <div className="space-y-8">
+          {groups.length === 0 && <p className="text-sm text-slate-400">No hay unidades ni sesiones en {period}.</p>}
+          {groups.map((g) => (
+            <section key={g.per} aria-label={g.per} className="space-y-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">{g.per} <span className="text-xs font-semibold text-slate-400">{g.units.length === 1 ? '1 unidad' : `${g.units.length} unidades`}</span></h2>
+              <div className="grid lg:grid-cols-2 gap-4">
+                {g.units.map((u) => {
+                  const ses = sessionsOfUnit(u);
+                  return planCard(u, false, (
+                    <div className="mt-1 space-y-2 border-l-2 border-orange-500/30 pl-3">
+                      <p className="text-xs font-semibold text-slate-400">{ses.length === 0 ? 'Aún no tiene sesiones' : ses.length === 1 ? '1 sesión' : `${ses.length} sesiones`}</p>
+                      {ses.map((x) => planCard(x, true))}
+                      {u.ownerUid === me.uid && <button type="button" onClick={() => setEditing(sessionIn(u))} className={btn.ghost}><Plus className="w-4 h-4" /> Nueva sesión en esta unidad</button>}
+                    </div>
+                  ));
+                })}
+              </div>
+              {g.loose.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold text-slate-300">Sesiones sin unidad</h3>
+                  <div className="grid md:grid-cols-2 gap-4">{g.loose.map((x) => planCard(x))}</div>
                 </div>
-                {p.observacion && p.status === 'Observado' && <p className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5">Observación: {p.observacion}</p>}
-                <div className="flex flex-wrap gap-1.5">{p.competencias.map((id) => <span key={id} className="px-2 py-0.5 rounded-full bg-slate-800 text-[11px] text-slate-300">{id.replace('c', 'C')}</span>)}</div>
-                <div className="flex flex-wrap gap-2 mt-auto pt-2">
-                  <button type="button" onClick={() => setViewing(p)} className={btn.secondary}><Printer className="w-4 h-4" /> Ver</button>
-                  {p.detalle && <WordButton ctx={ctx} plan={p} />}
-                  {p.kind === 'unidad' && p.detalle?.tipo === 'unidad' && mine && <button type="button" onClick={() => setSessionsOf(p)} className={btn.secondary}><ListOrdered className="w-4 h-4" /> Generar sesiones</button>}
-                  {p.kind === 'sesion' && <button type="button" onClick={() => setChecklist(p)} className={btn.secondary}><ClipboardCheck className="w-4 h-4" /> Lista de cotejo</button>}
-                  {mine && <button type="button" onClick={() => setEditing(p)} className={btn.ghost} aria-label="Editar"><Pencil className="w-4 h-4" /></button>}
-                  {mine && <button type="button" onClick={() => setEditing({ ...p, id: '', title: `${p.title} (copia)`, status: 'Borrador', observacion: '' })} className={btn.ghost} aria-label="Duplicar"><Copy className="w-4 h-4" /></button>}
-                  {mine && (p.status === 'Borrador' || p.status === 'Observado') && !isDirector && (
-                    <button type="button" onClick={() => save({ ...p, status: 'Enviado' }, 'Enviado a la dirección para su revisión.')} className={btn.ghost}><Send className="w-4 h-4" /> Enviar</button>
-                  )}
-                  {isDirector && !mine && p.status !== 'Visado' && (
-                    <button type="button" onClick={() => save({ ...p, status: 'Visado', observacion: '' }, `Visaste "${p.title}".`)} className={btn.ghost}><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Visar</button>
-                  )}
-                  {isDirector && !mine && <ObserveButton onObserve={(text) => save({ ...p, status: 'Observado', observacion: text }, 'Observación enviada al docente.')} />}
-                  {(mine || isDirector) && <button type="button" onClick={() => setDeleting(p)} className={btn.ghost} aria-label="Eliminar"><Trash2 className="w-4 h-4 text-rose-400" /></button>}
-                </div>
-              </Card>
-            );
-          })}
+              )}
+            </section>
+          ))}
         </div>
       )}
 
-      {editing && <PlanEditor ctx={ctx} plan={editing} onClose={() => setEditing(null)} onSave={async (p) => { const ok = await save(p, 'Documento guardado.'); if (ok) setEditing(null); }} />}
+      {editing && <PlanEditor ctx={ctx} plan={editing} units={(plans || []).filter((x) => x.kind === 'unidad' && x.ownerUid === (editing.ownerUid || me.uid))} onClose={() => setEditing(null)} onSave={async (p) => { const ok = await save(p, 'Documento guardado.'); if (ok) setEditing(null); }} />}
       {viewing && <PlanDocument ctx={ctx} plan={viewing} onClose={() => setViewing(null)} />}
       {checklist && <Checklist ctx={ctx} plan={checklist} onClose={() => setChecklist(null)} />}
+      {rubricOf && <RubricaSheet ctx={ctx} plan={rubricOf} unit={(plans || []).find((x) => x.id === rubricOf.unidadId)} onClose={() => setRubricOf(null)} />}
       {asking && <AiModal ctx={ctx} makePlan={(k) => newPlan(ctx, k)} onClose={() => setAsking(false)} onDone={(p) => { setAsking(false); setEditing(p); }} />}
       {sessionsOf && <UnitSessions ctx={ctx} unit={sessionsOf} plans={plans || []} makePlan={(k) => newPlan(ctx, k)} onClose={() => setSessionsOf(null)} onOpen={(p) => { setSessionsOf(null); setEditing(p); }} />}
       {deleting && (
         <Modal title="¿Eliminar este documento?" onClose={() => setDeleting(null)}>
-          <p className="text-sm text-slate-300">“{deleting.title}” se borra para siempre.</p>
+          <p className="text-sm text-slate-300">“{deleting.title}” se borra para siempre.{deleting.kind === 'unidad' && (plans || []).some((x) => x.unidadId === deleting.id) ? ' Sus sesiones se conservan como sesiones sin unidad.' : ''}</p>
           <div className="flex justify-end gap-2"><button type="button" onClick={() => setDeleting(null)} className={btn.ghost}>Cancelar</button><button type="button" onClick={() => remove(deleting)} className={btn.danger}>Eliminar</button></div>
         </Modal>
       )}
@@ -171,7 +213,7 @@ export function newPlan(ctx: PanelCtx, kind: Plan['kind']): Plan {
   };
 }
 
-function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan; onClose: () => void; onSave: (p: Plan) => void }) {
+function PlanEditor({ ctx, plan, units, onClose, onSave }: { ctx: PanelCtx; plan: Plan; units: Plan[]; onClose: () => void; onSave: (p: Plan) => void }) {
   const { config, myAreas } = ctx;
   const [p, setP] = useState<Plan>(plan);
   const set = <K extends keyof Plan>(k: K, v: Plan[K]) => setP((x) => ({ ...x, [k]: v }));
@@ -187,10 +229,23 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
     setP((x) => ({ ...x, area, level: lv, competencias: [], capacidades: [], instrumento: areaInfo(area)?.instrumentos[0] || x.instrumento }));
   };
 
+  const unit = units.find((u) => u.id === p.unidadId);
+  // Una sesión dentro de una unidad toma su bimestre, área, grado y sección.
+  const pickUnit = (id: string) => {
+    const u = units.find((x) => x.id === id);
+    setP((x) => (u ? { ...x, unidadId: u.id, period: u.period, area: u.area, level: u.level, grade: u.grade, section: u.section } : { ...x, unidadId: undefined }));
+  };
+  const criteriosList = p.criterios.split('\n').map((c) => c.trim()).filter(Boolean);
+  const fromCriterios = () => {
+    const have = new Set((p.rubrica || []).map((r) => r.criterio.trim().toLowerCase()));
+    set('rubrica', [...(p.rubrica || []), ...criteriosList.filter((c) => !have.has(c.replace(/\.$/, '').toLowerCase())).map(rubricaDesde)]);
+  };
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (p.detalle) { onSave(withDetalle({ ...p, title: p.title.trim() }, cleanDetalle(p.detalle, p.duration))); return; }
-    onSave({ ...p, title: p.title.trim(), competencias: p.competencias.filter((c) => comps.some((x) => x.id === c)) });
+    const rubrica = (p.rubrica || []).filter((r) => r.criterio.trim());
+    onSave({ ...p, title: p.title.trim(), competencias: p.competencias.filter((c) => comps.some((x) => x.id === c)), rubrica: p.kind === 'sesion' ? rubrica : undefined });
   };
 
   const txt = (k: keyof Plan, title: string, rows = 3, placeholder = '') => (
@@ -208,6 +263,15 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
             <label className={label} htmlFor="pl-title">Título</label>
             <input id="pl-title" required value={p.title} onChange={(e) => set('title', e.target.value)} className={input} placeholder={p.kind === 'unidad' ? 'Ej.: Cuidamos nuestra salud y la de nuestra comunidad' : 'Ej.: Resolvemos problemas de fracciones en el mercado'} />
           </div>
+          {p.kind === 'sesion' && (
+            <div className="sm:col-span-2">
+              <label className={label} htmlFor="pl-unit">Unidad</label>
+              <select id="pl-unit" value={p.unidadId || ''} onChange={(e) => pickUnit(e.target.value)} className={input}>
+                <option value="">Sin unidad</option>
+                {units.map((u) => <option key={u.id} value={u.id}>{u.period} · {u.title || 'Unidad sin título'}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className={label} htmlFor="pl-area">Área</label>
             <select id="pl-area" value={p.area} onChange={(e) => changeArea(e.target.value)} className={input}>{myAreas.map((a) => <option key={a}>{a}</option>)}</select>
@@ -230,7 +294,10 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
           </div>
           <div>
             <label className={label} htmlFor="pl-period">Periodo</label>
-            <select id="pl-period" value={p.period} onChange={(e) => set('period', e.target.value)} className={input}>{periodNames(config).map((n) => <option key={n}>{n}</option>)}</select>
+            <select id="pl-period" value={p.period} disabled={!!unit} title={unit ? 'Va en el mismo periodo que su unidad' : undefined} onChange={(e) => set('period', e.target.value)} className={input}>
+              {!periodNames(config).includes(p.period) && <option>{p.period}</option>}
+              {periodNames(config).map((n) => <option key={n}>{n}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -302,6 +369,13 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
             })}
           </div>
         </fieldset>
+
+        {p.kind === 'sesion' && (
+          <div className="space-y-2">
+            <RubricaEditor items={p.rubrica || []} onChange={(v) => set('rubrica', v)} />
+            {criteriosList.length > 0 && <button type="button" onClick={fromCriterios} className={btn.secondary}><Grid3x3 className="w-4 h-4" /> Armar la rúbrica con mis criterios</button>}
+          </div>
+        )}
 
         {p.kind === 'sesion' && (
           <div className="space-y-3">
@@ -385,6 +459,12 @@ function PlanDocument({ ctx, plan: p, onClose }: { ctx: PanelCtx; plan: Plan; on
         {row('Cierre', p.cierre)}
         {row('Materiales', p.materiales)}
       </section>
+      {p.kind === 'sesion' && rubricaOf(p).length > 0 && (
+        <table className="w-full mt-5 border-collapse text-xs">
+          <thead><tr className="bg-slate-100">{['Criterio', 'Destacado (4)', 'Esperado (3)', 'En proceso (2)', 'En inicio (1)'].map((h) => <th key={h} className="text-left p-2 border border-slate-300">{h}</th>)}</tr></thead>
+          <tbody>{rubricaOf(p).map((r, i) => <tr key={i}>{[r.criterio, r.destacado, r.esperado, r.proceso, r.inicio].map((v, j) => <td key={j} className="p-2 border border-slate-300 align-top">{v}</td>)}</tr>)}</tbody>
+        </table>
+      )}
       <footer className="mt-14 grid grid-cols-2 gap-10 text-center text-xs">
         <div className="border-t border-slate-500 pt-1.5">{p.ownerName}<span className="block text-slate-500">Docente</span></div>
         <div className="border-t border-slate-500 pt-1.5">{p.status === 'Visado' ? 'Visado por la dirección' : 'V.° B.° Dirección'}</div>
@@ -430,6 +510,74 @@ function Checklist({ ctx, plan: p, onClose }: { ctx: PanelCtx; plan: Plan; onClo
         </table>
       )}
       {criterios.length > 0 && <ol className="mt-4 list-decimal pl-5 text-xs space-y-0.5">{criterios.map((c, i) => <li key={i}>{c}</li>)}</ol>}
+    </PrintFrame>
+  );
+}
+
+/** La rúbrica de una sesión: la que armó la IA, la que escribió el docente o, si no hay, una desde sus criterios. */
+export function rubricaOf(p: Plan): RubricaFila[] {
+  if (p.detalle?.tipo === 'sesion' && p.detalle.rubrica.length) return p.detalle.rubrica;
+  if (p.rubrica?.length) return p.rubrica;
+  const crit = p.detalle?.tipo === 'sesion' ? p.detalle.proposito.flatMap((x) => x.criterios) : p.criterios.split('\n');
+  return crit.map((c) => c.trim()).filter(Boolean).map(rubricaDesde);
+}
+
+function RubricaSheet({ ctx, plan: p, unit, onClose }: { ctx: PanelCtx; plan: Plan; unit?: Plan; onClose: () => void }) {
+  const aulas = [...new Set(ctx.students.filter((s) => s.gradeLevel === p.grade && (!p.section || s.section === p.section)).map(aulaOf))].sort();
+  const [aula, setAula] = useState(aulas[0] || '');
+  const list = ctx.students.filter((s) => aulaOf(s) === aula).sort((a, b) => a.fullName.localeCompare(b.fullName));
+  const rows = rubricaOf(p);
+  const th = 'p-1.5 border border-slate-300 font-semibold text-left align-bottom';
+  const td = 'p-1.5 border border-slate-300 align-top';
+  return (
+    <PrintFrame title="Rúbrica de evaluación" onClose={onClose}>
+      <div className="print:hidden mb-4">
+        <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="rb-aula">Aula</label>
+        <select id="rb-aula" value={aula} onChange={(e) => setAula(e.target.value)} className="h-10 px-3 rounded-lg border border-slate-300">
+          {aulas.length ? aulas.map((a) => <option key={a}>{a}</option>) : <option value="">Sin estudiantes en {p.grade}</option>}
+        </select>
+      </div>
+      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold">Rúbrica de evaluación · {p.area} · {p.period}</p>
+      <h1 className="text-lg font-bold mt-1">{p.title}</h1>
+      <p className="text-xs text-slate-600">{unit ? `${unit.title} · ` : ''}{aula} · {p.ownerName} · {p.date}</p>
+      {rows.length === 0 ? <p className="mt-4 text-sm text-slate-500">Escribe los criterios o la rúbrica en la sesión para generarla.</p> : (
+        <>
+          <table className="w-full mt-4 border-collapse text-[11px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className={th}>Criterio</th><th className={th}>Logro destacado (4)</th><th className={th}>Logro esperado (3)</th><th className={th}>En proceso (2)</th><th className={th}>En inicio (1)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}><td className={`${td} font-semibold`}>{i + 1}. {r.criterio}</td><td className={td}>{r.destacado}</td><td className={td}>{r.esperado}</td><td className={td}>{r.proceso}</td><td className={td}>{r.inicio}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <h2 className="mt-6 text-sm font-bold">Registro de {aula || 'la sección'}</h2>
+          <table className="w-full mt-2 border-collapse text-[11px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="p-1.5 border border-slate-300 w-6">N.°</th>
+                <th className={th}>Estudiante</th>
+                {rows.map((r, i) => <th key={i} className="p-1.5 border border-slate-300 font-semibold w-12 text-center" title={r.criterio}>C{i + 1}</th>)}
+                <th className="p-1.5 border border-slate-300 font-semibold w-16 text-center">Nivel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((s, i) => (
+                <tr key={s.id}>
+                  <td className="p-1.5 border border-slate-300 text-center">{i + 1}</td>
+                  <td className="p-1.5 border border-slate-300">{s.fullName}</td>
+                  {rows.map((_, j) => <td key={j} className="p-1.5 border border-slate-300" />)}
+                  <td className="p-1.5 border border-slate-300" />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[10px] text-slate-500">Escribe en cada criterio 4, 3, 2 o 1 según la rúbrica. Nivel: AD (destacado), A (esperado), B (en proceso), C (en inicio).</p>
+        </>
+      )}
     </PrintFrame>
   );
 }

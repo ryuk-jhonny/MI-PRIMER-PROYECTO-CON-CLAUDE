@@ -1,5 +1,5 @@
 import { FirebaseApp, initializeApp } from 'firebase/app';
-import { Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
+import { Auth, browserSessionPersistence, connectAuthEmulator, initializeAuth } from 'firebase/auth';
 import { connectFirestoreEmulator, Firestore, initializeFirestore } from 'firebase/firestore';
 import { cloudEnabled, FIREBASE_CONFIG, USE_EMULATORS } from './env';
 
@@ -16,7 +16,8 @@ function init() {
       ? { apiKey: 'demo-key', projectId: FIREBASE_CONFIG.projectId || 'demo-ryuk', appId: 'demo-app', authDomain: 'localhost' }
       : (FIREBASE_CONFIG as Record<string, string>),
   );
-  auth = getAuth(app);
+  // La sesión vive solo en esta pestaña: al cerrarla (o cerrar el navegador) hay que volver a ingresar.
+  auth = initializeAuth(app, { persistence: browserSessionPersistence });
   db = initializeFirestore(app, { ignoreUndefinedProperties: true });
   if (USE_EMULATORS) {
     const host = window.location.hostname || '127.0.0.1';

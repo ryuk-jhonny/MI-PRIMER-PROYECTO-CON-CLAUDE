@@ -6,7 +6,7 @@ import { Student } from '../types/education';
 import { DEFAULT_DIRECTOR_PROFILE, DEFAULT_INSTITUTION_CONFIG, DirectorProfile, InstitutionConfig } from '../types/institution';
 import type { Level } from './cneb';
 import { fb } from './firebase';
-import type { PlanDoc } from './planDoc';
+import type { PlanDoc, RubricaFila } from './planDoc';
 import { ClassBlock, OwnedBlock, TeacherSchedule } from './schedule';
 
 // =====================================================================
@@ -105,8 +105,10 @@ export interface Plan {
   updatedAt: string;
   /** Documento completo con el formato del docente (lo arma la IA y se descarga en Word). */
   detalle?: PlanDoc;
-  /** La unidad de la que salió esta sesión. */
+  /** La unidad a la que pertenece esta sesión (y de la que toma el bimestre). */
   unidadId?: string;
+  /** Rúbrica de una sesión hecha a mano (las de la IA la llevan en `detalle`). */
+  rubrica?: RubricaFila[];
 }
 
 export interface Task {
@@ -149,6 +151,27 @@ export interface FitnessRecord {
   ownerUid: string;
   createdAt: string;
 }
+
+/** Asistencia en el aula: P presente, T tarde, F falta, J justificada. */
+export type ClassMark = 'P' | 'T' | 'F' | 'J';
+
+export const CLASS_MARK_LABEL: Record<ClassMark, string> = { P: 'Presente', T: 'Tarde', F: 'Falta', J: 'Justificada' };
+
+/** Asistencia de una clase: un documento por docente, día, área y aula. */
+export interface ClassAttendance {
+  id: string;
+  ownerUid: string;
+  ownerName: string;
+  area: string;
+  aula: string;
+  day: string;
+  marks: Record<string, ClassMark>;
+  updatedAt: string;
+}
+
+const slug = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+export const classAttendanceId = (uid: string, day: string, area: string, aula: string) => `${uid}_${day}_${slug(area)}_${slug(aula)}`;
 
 export interface Codes { docente: string; auxiliar: string }
 
@@ -447,6 +470,21 @@ export function createStaffStore(me: UserProfile) {
       return missing.length;
     },
 
+    // ----- Asistencia de clase (cada docente la suya) -----
+
+    async listClassAttendance(): Promise<ClassAttendance[]> {
+      const q = role === 'director' ? query(col('classAttendance'), limit(5000)) : query(col('classAttendance'), where('ownerUid', '==', me.uid));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ClassAttendance, 'id'>) })).sort((a, b) => a.day.localeCompare(b.day));
+    },
+
+    async saveClassAttendance(r: Pick<ClassAttendance, 'area' | 'aula' | 'day' | 'marks'>): Promise<ClassAttendance> {
+      const id = classAttendanceId(me.uid, r.day, r.area, r.aula);
+      const next = { ownerUid: me.uid, ownerName: me.fullName, area: r.area, aula: r.aula, day: r.day, marks: r.marks, updatedAt: nowIso() };
+      await setDoc(sub('classAttendance', id), clean(next));
+      return { id, ...next };
+    },
+
     // ----- Comunicados -----
 
     async listAnnouncements(): Promise<Announcement[]> {
@@ -483,6 +521,11 @@ export function createStaffStore(me: UserProfile) {
 
     async removeMember(uid: string) {
       await deleteDoc(doc(db, 'users', uid));
+    },
+
+    /** Dirección: áreas, niveles y aulas de un docente. */
+    async updateTeacherLoad(uid: string, patch: Pick<UserProfile, 'areas' | 'levels' | 'aulas'>) {
+      await updateDoc(doc(db, 'users', uid), clean(patch));
     },
 
     async getCodes(): Promise<Codes | null> {

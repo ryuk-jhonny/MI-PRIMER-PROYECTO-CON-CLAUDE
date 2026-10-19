@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Copy, GraduationCap, HeartHandshake, RefreshCw, ShieldCheck, Trash2, TriangleAlert, Users } from 'lucide-react';
+import { Copy, GraduationCap, Pencil, HeartHandshake, RefreshCw, ShieldCheck, Trash2, TriangleAlert, Users } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Codes, ROLE_LABEL, UserProfile } from '../lib/store';
 import { friendlyError } from '../lib/firebase';
 import { areasOf, LEVEL_LABEL } from '../lib/cneb';
 import { btn, Card, Modal, PageHeader } from './ui';
+import { LoadForm } from './AreaTab';
 
 export default function TeamTab({ ctx }: { ctx: PanelCtx }) {
   const { store, config } = ctx;
   const [members, setMembers] = useState<UserProfile[] | null>(null);
   const [codes, setCodes] = useState<Codes | null>(null);
   const [removing, setRemoving] = useState<UserProfile | null>(null);
+  const [loadOf, setLoadOf] = useState<UserProfile | null>(null);
 
   const load = async () => {
     try {
@@ -47,7 +49,7 @@ export default function TeamTab({ ctx }: { ctx: PanelCtx }) {
 
   return (
     <div className="space-y-6 stagger">
-      <PageHeader title="Equipo docente" subtitle="Cada docente entra con su cuenta y trabaja con las competencias de sus propias áreas." />
+      <PageHeader title="Equipo docente" subtitle="Cada docente entra con su cuenta y trabaja con las competencias de sus propias áreas. Con «Áreas» puedes asignarle una o varias." />
 
       <Card className="p-5 sm:p-6 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -59,7 +61,7 @@ export default function TeamTab({ ctx }: { ctx: PanelCtx }) {
         </div>
         {codes ? (
           <div className="grid sm:grid-cols-2 gap-3">
-            {([['docente', 'Docentes', 'Planifican, califican por competencia, publican actividades y toman asistencia.'], ['auxiliar', 'Personal de puerta', 'Solo registran ingresos con el escáner QR.']] as const).map(([role, title, desc]) => (
+            {([['docente', 'Docentes', 'Planifican, califican por competencia, publican actividades y toman la asistencia de su clase.'], ['auxiliar', 'Personal de puerta', 'Registran los ingresos en la puerta con el escáner QR.']] as const).map(([role, title, desc]) => (
               <div key={role} className="p-4 rounded-xl bg-slate-950 border border-slate-800">
                 <p className="font-semibold text-white">{title}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
@@ -100,12 +102,26 @@ export default function TeamTab({ ctx }: { ctx: PanelCtx }) {
                     {(m.areas || []).map((a) => <span key={a} className="px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-200 text-[11px] font-semibold">{a}</span>)}
                   </div>
                 </div>
+                <button type="button" onClick={() => setLoadOf(m)} className={btn.ghost} aria-label={`Editar áreas de ${m.fullName}`}><Pencil className="w-4 h-4" /> <span className="hidden sm:inline">Áreas</span></button>
                 <button type="button" onClick={() => setRemoving(m)} className={btn.ghost} aria-label={`Quitar acceso a ${m.fullName}`}><Trash2 className="w-4 h-4 text-rose-400" /></button>
               </li>
             ))}
           </ul>
         )}
       </Card>
+
+      {loadOf && (
+        <Modal title={`Carga docente de ${loadOf.fullName}`} onClose={() => setLoadOf(null)} wide>
+          <LoadForm ctx={ctx} initial={loadOf} who="docente" onCancel={() => setLoadOf(null)} onSave={async (patch) => {
+            try {
+              await store.updateTeacherLoad(loadOf.uid, patch);
+              setMembers((l) => l?.map((x) => (x.uid === loadOf.uid ? { ...x, ...patch } : x)) || null);
+              ctx.toast(`Áreas de ${loadOf.fullName} guardadas.`);
+              setLoadOf(null);
+            } catch (err) { ctx.toast(friendlyError(err), 'error'); }
+          }} />
+        </Modal>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="overflow-hidden">

@@ -10,7 +10,7 @@ import { aulaOf, CNEB_AREAS, compUnitsOf, findGrade, formatDay, levelOf, LITERAL
 import { AppBackdrop, Badge, btn, Card, Empty, Modal, PageHeader, Stat, STATUS_STYLE, textarea } from '../panel/ui';
 import FullLoader from '../app/FullLoader';
 import Logo from '../app/Logo';
-import { dayName, nowIn, OwnedBlock, sortBlocks } from '../lib/schedule';
+import { bellSlots, dayName, nowIn, OwnedBlock, sortBlocks } from '../lib/schedule';
 import { Week } from '../panel/ScheduleTab';
 import { EASE_OUT, ScrollProgressBar, useAutoReveal, useSpotlight } from '../lib/motionKit';
 
@@ -185,7 +185,7 @@ function Overview({ store, student: s, config, go }: { store: FStore; student: S
       )}
       {week && (
         <Modal title={`Horario de ${aulaOf(s)}`} onClose={() => setWeek(false)} wide>
-          <Week blocks={blocks} showOwner />
+          <Week blocks={blocks} slots={bellSlots(config.bell)} showOwner />
         </Modal>
       )}
       <div className="grid lg:grid-cols-2 gap-4">

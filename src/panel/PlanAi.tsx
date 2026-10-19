@@ -5,7 +5,7 @@ import { FileDown, Loader2, Plus, ShieldCheck, Sparkles, Trash2, Wand2 } from 'l
 import type { PanelCtx } from './Panel';
 import { competenciasOf, cicloOf, gradeNumber, Level, LEVEL_LABEL } from '../lib/cneb';
 import { AiRequest, generateWithAi, withDetalle } from '../lib/planAi';
-import { longDate, minutesOf, normalizeSesion, normalizeUnidad, PlanDoc, PropositoFila, SesionDoc, UnidadDoc } from '../lib/planDoc';
+import { longDate, minutesOf, normalizeSesion, normalizeUnidad, PlanDoc, PropositoFila, RubricaFila, SesionDoc, UnidadDoc } from '../lib/planDoc';
 import type { Plan } from '../lib/store';
 import type { WordInfo } from '../lib/planWord';
 import { btn, input, label, Modal, textarea } from './ui';
@@ -331,18 +331,25 @@ export function DetalleEditor({ value, onChange }: { value: PlanDoc; onChange: (
         {momento('desarrollo', 'Desarrollo', 10)}
         {momento('cierre', 'Cierre', 5)}
       </div>
-      <Rows title="Rúbrica de evaluación" items={d.rubrica} onChange={(v) => set({ rubrica: v })} blank={{ criterio: '', destacado: '', esperado: '', proceso: '', inicio: '' }}>
-        {(r, s, i) => (
-          <div className="grid sm:grid-cols-2 gap-2">
-            <div className="sm:col-span-2"><Txt id={`ds-rc${i}`} title="Criterio" value={r.criterio} onChange={(v) => s({ criterio: v })} /></div>
-            <Txt id={`ds-r4${i}`} title="Logro destacado (4)" value={r.destacado} onChange={(v) => s({ destacado: v })} />
-            <Txt id={`ds-r3${i}`} title="Logro esperado (3)" value={r.esperado} onChange={(v) => s({ esperado: v })} />
-            <Txt id={`ds-r2${i}`} title="En proceso (2)" value={r.proceso} onChange={(v) => s({ proceso: v })} />
-            <Txt id={`ds-r1${i}`} title="En inicio (1)" value={r.inicio} onChange={(v) => s({ inicio: v })} />
-          </div>
-        )}
-      </Rows>
+      <RubricaEditor items={d.rubrica} onChange={(v) => set({ rubrica: v })} />
     </div>
+  );
+}
+
+/** Rúbrica de una sesión: un criterio por fila y sus cuatro niveles de logro. */
+export function RubricaEditor({ items, onChange }: { items: RubricaFila[]; onChange: (v: RubricaFila[]) => void }) {
+  return (
+    <Rows title="Rúbrica de evaluación" items={items} onChange={onChange} blank={{ criterio: '', destacado: '', esperado: '', proceso: '', inicio: '' }}>
+      {(r, s, i) => (
+        <div className="grid sm:grid-cols-2 gap-2">
+          <div className="sm:col-span-2"><Txt id={`ds-rc${i}`} title="Criterio" value={r.criterio} onChange={(v) => s({ criterio: v })} /></div>
+          <Txt id={`ds-r4${i}`} title="Logro destacado (4)" value={r.destacado} onChange={(v) => s({ destacado: v })} />
+          <Txt id={`ds-r3${i}`} title="Logro esperado (3)" value={r.esperado} onChange={(v) => s({ esperado: v })} />
+          <Txt id={`ds-r2${i}`} title="En proceso (2)" value={r.proceso} onChange={(v) => s({ proceso: v })} />
+          <Txt id={`ds-r1${i}`} title="En inicio (1)" value={r.inicio} onChange={(v) => s({ inicio: v })} />
+        </div>
+      )}
+    </Rows>
   );
 }
 
