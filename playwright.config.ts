@@ -22,7 +22,7 @@ export default defineConfig({
     { name: 'escritorio', use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 860 } } },
   ],
   webServer: {
-    command: `npx vite --mode emulador --port ${PORT} --strictPort --host 127.0.0.1`,
+    command: `AI_FAKE=1 npx vite --mode emulador --port ${PORT} --strictPort --host 127.0.0.1`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: false,
     timeout: 60_000,

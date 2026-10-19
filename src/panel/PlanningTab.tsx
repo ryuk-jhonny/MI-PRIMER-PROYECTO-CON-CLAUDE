@@ -1,11 +1,13 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, Copy, FilePlus2, MessageSquareWarning, NotebookPen, Pencil, Printer, Send, Trash2, X } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Copy, FilePlus2, ListOrdered, MessageSquareWarning, NotebookPen, Pencil, Printer, Send, Sparkles, Trash2, X } from 'lucide-react';
 import type { PanelCtx } from './Panel';
 import { Plan, PlanStatus } from '../lib/store';
 import { friendlyError } from '../lib/firebase';
 import { areaInfo, cicloOf, competenciasOf, ENFOQUES_TRANSVERSALES, gradeNumber, INSTRUMENTOS, Level, LEVEL_LABEL } from '../lib/cneb';
 import { aulaOf, periodNames } from '../lib/school';
 import { Badge, btn, Card, Empty, input, label, Modal, PageHeader, textarea } from './ui';
+import { withDetalle } from '../lib/planAi';
+import { AiModal, cleanDetalle, DetalleEditor, DetalleView, UnitSessions, WordButton, wordInfo } from './PlanAi';
 
 const STATUS_STYLE: Record<PlanStatus, string> = {
   Borrador: 'bg-slate-800 text-slate-300 border-slate-700',
@@ -21,6 +23,8 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
   const [viewing, setViewing] = useState<Plan | null>(null);
   const [checklist, setChecklist] = useState<Plan | null>(null);
   const [deleting, setDeleting] = useState<Plan | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [sessionsOf, setSessionsOf] = useState<Plan | null>(null);
   const [kind, setKind] = useState<'todos' | Plan['kind']>('todos');
   const [owner, setOwner] = useState('');
 
@@ -55,7 +59,8 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
         subtitle={isDirector ? 'Revisa y visa las unidades y sesiones de tu plana docente.' : 'Unidades y sesiones de aprendizaje con las competencias del CNEB de tus áreas.'}
         actions={canWrite && ctx.myAreas.length ? (
           <>
-            <button type="button" onClick={() => setEditing(newPlan(ctx, 'sesion'))} className={btn.primary}><FilePlus2 className="w-4 h-4" /> Nueva sesión</button>
+            <button type="button" onClick={() => setAsking(true)} className={btn.primary}><Sparkles className="w-4 h-4" /> Generar con IA</button>
+            <button type="button" onClick={() => setEditing(newPlan(ctx, 'sesion'))} className={btn.secondary}><FilePlus2 className="w-4 h-4" /> Nueva sesión</button>
             <button type="button" onClick={() => setEditing(newPlan(ctx, 'unidad'))} className={btn.secondary}><FilePlus2 className="w-4 h-4" /> Nueva unidad</button>
           </>
         ) : undefined}
@@ -99,6 +104,8 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
                 <div className="flex flex-wrap gap-1.5">{p.competencias.map((id) => <span key={id} className="px-2 py-0.5 rounded-full bg-slate-800 text-[11px] text-slate-300">{id.replace('c', 'C')}</span>)}</div>
                 <div className="flex flex-wrap gap-2 mt-auto pt-2">
                   <button type="button" onClick={() => setViewing(p)} className={btn.secondary}><Printer className="w-4 h-4" /> Ver</button>
+                  {p.detalle && <WordButton ctx={ctx} plan={p} />}
+                  {p.kind === 'unidad' && p.detalle?.tipo === 'unidad' && mine && <button type="button" onClick={() => setSessionsOf(p)} className={btn.secondary}><ListOrdered className="w-4 h-4" /> Generar sesiones</button>}
                   {p.kind === 'sesion' && <button type="button" onClick={() => setChecklist(p)} className={btn.secondary}><ClipboardCheck className="w-4 h-4" /> Lista de cotejo</button>}
                   {mine && <button type="button" onClick={() => setEditing(p)} className={btn.ghost} aria-label="Editar"><Pencil className="w-4 h-4" /></button>}
                   {mine && <button type="button" onClick={() => setEditing({ ...p, id: '', title: `${p.title} (copia)`, status: 'Borrador', observacion: '' })} className={btn.ghost} aria-label="Duplicar"><Copy className="w-4 h-4" /></button>}
@@ -120,6 +127,8 @@ export default function PlanningTab({ ctx }: { ctx: PanelCtx }) {
       {editing && <PlanEditor ctx={ctx} plan={editing} onClose={() => setEditing(null)} onSave={async (p) => { const ok = await save(p, 'Documento guardado.'); if (ok) setEditing(null); }} />}
       {viewing && <PlanDocument ctx={ctx} plan={viewing} onClose={() => setViewing(null)} />}
       {checklist && <Checklist ctx={ctx} plan={checklist} onClose={() => setChecklist(null)} />}
+      {asking && <AiModal ctx={ctx} makePlan={(k) => newPlan(ctx, k)} onClose={() => setAsking(false)} onDone={(p) => { setAsking(false); setEditing(p); }} />}
+      {sessionsOf && <UnitSessions ctx={ctx} unit={sessionsOf} plans={plans || []} makePlan={(k) => newPlan(ctx, k)} onClose={() => setSessionsOf(null)} onOpen={(p) => { setSessionsOf(null); setEditing(p); }} />}
       {deleting && (
         <Modal title="¿Eliminar este documento?" onClose={() => setDeleting(null)}>
           <p className="text-sm text-slate-300">“{deleting.title}” se borra para siempre.</p>
@@ -180,6 +189,7 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (p.detalle) { onSave(withDetalle({ ...p, title: p.title.trim() }, cleanDetalle(p.detalle, p.duration))); return; }
     onSave({ ...p, title: p.title.trim(), competencias: p.competencias.filter((c) => comps.some((x) => x.id === c)) });
   };
 
@@ -191,7 +201,7 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
   );
 
   return (
-    <Modal title={p.kind === 'unidad' ? 'Unidad de aprendizaje' : 'Sesión de aprendizaje'} onClose={onClose} wide>
+    <Modal title={p.kind === 'unidad' ? 'Unidad de aprendizaje' : 'Sesión de aprendizaje'} onClose={onClose} wide={!p.detalle} xl={!!p.detalle}>
       <form onSubmit={submit} className="space-y-5">
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
@@ -234,6 +244,12 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
           </div>
         </div>
 
+        {p.detalle ? (
+          <>
+            <p className="flex gap-2 text-xs text-orange-200 bg-orange-500/10 border border-orange-500/30 rounded-xl p-3"><Sparkles className="w-4 h-4 shrink-0" /> Revisa y corrige lo que armó la IA antes de guardar. Todo se puede editar.</p>
+            <DetalleEditor value={p.detalle} onChange={(d) => set('detalle', d)} />
+          </>
+        ) : (<>
         {p.kind === 'unidad'
           ? txt('situacion', 'Situación significativa', 4, 'Describe el reto o problema del contexto que movilizará las competencias.')
           : txt('proposito', 'Propósito de la sesión', 2, 'Hoy aprenderemos a…')}
@@ -296,6 +312,7 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
           </div>
         )}
         {txt('materiales', 'Materiales y recursos', 2)}
+        </>)}
 
         <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-slate-900 py-3 -mb-3">
           <button type="button" onClick={onClose} className={btn.ghost}>Cancelar</button>
@@ -306,11 +323,12 @@ function PlanEditor({ ctx, plan, onClose, onSave }: { ctx: PanelCtx; plan: Plan;
   );
 }
 
-function PrintFrame({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+function PrintFrame({ title, onClose, children, actions }: { title: string; onClose: () => void; children: ReactNode; actions?: ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/90 print:bg-white" role="dialog" aria-modal="true" aria-label={title}>
       <div className="max-w-3xl mx-auto p-3 sm:p-6">
         <div className="flex justify-end gap-2 mb-3 print:hidden">
+          {actions}
           <button type="button" onClick={() => window.print()} className={btn.primary}><Printer className="w-4 h-4" /> Imprimir o guardar PDF</button>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="w-11 h-11 rounded-xl bg-slate-800 text-white flex items-center justify-center cursor-pointer"><X className="w-5 h-5" /></button>
         </div>
@@ -322,6 +340,13 @@ function PrintFrame({ title, onClose, children }: { title: string; onClose: () =
 
 function PlanDocument({ ctx, plan: p, onClose }: { ctx: PanelCtx; plan: Plan; onClose: () => void }) {
   const comps = competenciasOf(p.area, p.level).filter((c) => p.competencias.includes(c.id));
+  if (p.detalle) {
+    return (
+      <PrintFrame title={p.title} onClose={onClose} actions={<WordButton ctx={ctx} plan={p} />}>
+        <DetalleView plan={p} info={wordInfo(ctx, p)} />
+      </PrintFrame>
+    );
+  }
   const row = (k: string, v: string) => v ? <div className="grid grid-cols-[150px_1fr] gap-3 py-1.5 border-b border-slate-200"><span className="font-semibold text-slate-600">{k}</span><span className="whitespace-pre-line">{v}</span></div> : null;
   return (
     <PrintFrame title={p.title} onClose={onClose}>

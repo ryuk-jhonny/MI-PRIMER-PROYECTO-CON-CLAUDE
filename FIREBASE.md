@@ -118,6 +118,19 @@ npm run deploy:reglas           # es lo mismo que: firebase deploy --only firest
 2. Antes de desplegar, entra a **Settings → Environment Variables** y agrega las mismas seis variables `VITE_FIREBASE_...` con sus valores. Márcalas para **Production**, **Preview** y **Development**.
 3. Pulsa **Deploy**. Si ya estaba desplegado, ve a **Deployments**, abre el último y pulsa **Redeploy**. Las variables solo se aplican en un despliegue nuevo.
 
+### Planificación con IA (opcional)
+
+El botón **Generar con IA** de Planificación usa Gemini de Google y, si falla, Groq. Las dos tienen un plan gratuito y sus claves viven solo en Vercel, nunca en la página.
+
+1. **Gemini.** Entra a <https://aistudio.google.com/apikey> con tu Gmail, pulsa **Create API key** y copia la clave.
+2. **Groq (respaldo).** Entra a <https://console.groq.com/keys>, crea tu cuenta, pulsa **Create API Key** y copia la clave.
+3. En Vercel, en **Settings → Environment Variables**, agrega `GEMINI_API_KEY` y `GROQ_API_KEY` con esas claves, marcadas para **Production**, **Preview** y **Development**. Con una sola de las dos ya funciona.
+4. Vuelve a desplegar (**Deployments → Redeploy**).
+
+Opcional: `GEMINI_MODEL` y `GROQ_MODEL` cambian el modelo (por defecto `gemini-flash-latest` y `llama-3.3-70b-versatile`). Cada docente puede generar hasta 25 documentos por día. A la IA solo se le envían el área, el grado, el tema, la duración y las notas que escriba el docente.
+
+Para probarla en tu computadora con `npm run dev`, pon las mismas claves en `.env.local`.
+
 ## Paso 8. Autoriza tu dominio
 
 Firebase solo permite iniciar sesión desde dominios que conoce.
@@ -175,6 +188,9 @@ La primera vez, `npm run test:e2e` puede pedirte instalar el navegador: `npx pla
 | «Este carnet ya está activado» | Ya se eligió un PIN para ese carnet. Ingresa con el PIN; si nadie lo recuerda, la dirección genera un QR nuevo. |
 | «El ingreso con carnet no está activado en Firebase» | Falta activar el proveedor **Anónimo** (Paso 2, punto 5). |
 | «Este carnet ya no está vigente» | La dirección generó un QR nuevo para ese estudiante. Escanea el carnet nuevo y actívalo otra vez con tu código. |
+| «La IA todavía no está configurada» | Faltan `GEMINI_API_KEY` o `GROQ_API_KEY` en Vercel. Agrégalas y vuelve a desplegar. |
+| «Llegaste al límite de 25 generaciones por hoy» | Es el límite diario por docente. Al día siguiente se puede seguir. |
+| «No pudimos registrar el uso de la IA» | Vuelve a publicar las reglas (Paso 5): la regla del límite diario es nueva. |
 | **No tienes permiso para hacer esto** | Publica las reglas (Paso 5). Si te acaban de cambiar de rol, cierra sesión y vuelve a entrar. |
 | `auth/unauthorized-domain` o no puedes iniciar sesión desde Vercel | Agrega el dominio en el Paso 8. |
 | **El código no es válido** | El código se escribió mal o la dirección generó códigos nuevos. Pide el código otra vez. |
@@ -189,6 +205,7 @@ La primera vez, `npm run test:e2e` puede pedirte instalar el navegador: `npx pla
 | `institutions/{id}/students` | Fichas y notas por competencia | Personal del colegio. Cada estudiante y su familia ven solo su ficha |
 | `institutions/{id}/attendance` | Ingresos del día | Personal del colegio. Cada estudiante y su familia ven solo los suyos |
 | `institutions/{id}/plans`, `tasks`, `fitness` | Planificación, actividades y evaluación física | Según el rol (ver `firestore.rules`) |
+| `institutions/{id}/aiUsage` | Cuántas veces usó la IA cada docente por día (solo sube de uno en uno, hasta 25) | El propio docente y la dirección |
 | `joinCodes`, `linkCodes` | Códigos de invitación y de vinculación | Se consultan uno por uno; nadie puede listarlos |
 | `portals/{token}` | Copia pública del carnet, **sin DNI, dirección ni teléfono** | Quien escanea el QR |
 | `boards/{id}` | Los últimos comunicados para el portal del carnet | Quien escanea el QR |

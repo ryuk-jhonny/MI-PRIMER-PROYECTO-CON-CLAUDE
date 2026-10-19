@@ -121,7 +121,7 @@ export function Avatar({ src, name, className = 'w-10 h-10' }: { src?: string; n
   );
 }
 
-export function Modal({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
+export function Modal({ title, children, onClose, wide, xl }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean; xl?: boolean }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -130,7 +130,7 @@ export function Modal({ title, children, onClose, wide }: { title: string; child
   return (
     <div className="anim-fade fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-950/80 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="Cerrar" className="absolute inset-0 cursor-default" onClick={onClose} tabIndex={-1} />
-      <div className={`relative w-full ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl shadow-orange-950/40 p-5 sm:p-6 space-y-4 anim-pop`}>
+      <div className={`relative w-full ${xl ? 'sm:max-w-4xl' : wide ? 'sm:max-w-2xl' : 'sm:max-w-md'} max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl shadow-orange-950/40 p-5 sm:p-6 space-y-4 anim-pop`}>
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-bold text-white">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Cerrar" className="w-9 h-9 -mt-1 -mr-1 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"><X className="w-5 h-5" /></button>

@@ -283,6 +283,34 @@ describe('Horarios', () => {
   });
 });
 
+describe('Límite diario de la IA', () => {
+  const DAY = '2026-03-10';
+  // Igual que el servidor: sube el contador de uno en uno.
+  const use = (uid: string, owner = uid, day = DAY) =>
+    setDoc(doc(db(uid), 'institutions', IID, 'aiUsage', `${owner}_${day}`), { uid: owner, day, count: increment(1) }, { merge: true });
+  it('cada docente suma su propio uso, de uno en uno', async () => {
+    await assertSucceeds(use('doc'));
+    await assertSucceeds(use('doc'));
+    await assertSucceeds(use('dir'));
+    await assertFails(use('doc', 'dir'));
+    await assertFails(use('aux'));
+    await assertFails(use('est'));
+    await assertFails(setDoc(doc(db('doc'), 'institutions', IID, 'aiUsage', `doc_${DAY}`), { uid: 'doc', day: DAY, count: 5 }, { merge: true }));
+    await assertFails(setDoc(doc(db('doc'), 'institutions', IID, 'aiUsage', `doc_2026-03-11`), { uid: 'doc', day: '2026-03-11', count: 0 }));
+  });
+  it('no pasa de 25 por día y nadie lo borra', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore() as unknown as Firestore, 'institutions', IID, 'aiUsage', `doc_${DAY}`), { uid: 'doc', day: DAY, count: 25 });
+    });
+    await assertFails(use('doc'));
+    await assertSucceeds(use('doc', 'doc', '2026-03-11'));
+    await assertFails(deleteDoc(doc(db('doc'), 'institutions', IID, 'aiUsage', `doc_${DAY}`)));
+    await assertFails(deleteDoc(doc(db('dir'), 'institutions', IID, 'aiUsage', `doc_${DAY}`)));
+    await assertSucceeds(getDoc(doc(db('dir'), 'institutions', IID, 'aiUsage', `doc_${DAY}`)));
+    await assertFails(getDoc(doc(db('aux'), 'institutions', IID, 'aiUsage', `doc_${DAY}`)));
+  });
+});
+
 describe('Planificación, actividades y evaluación física', () => {
   it('cada docente ve su planificación y la dirección ve todas', async () => {
     await assertSucceeds(getDocs(query(collection(db('doc'), 'institutions', IID, 'plans'), where('ownerUid', '==', 'doc'))));
