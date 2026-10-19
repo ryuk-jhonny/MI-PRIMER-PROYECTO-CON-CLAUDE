@@ -93,16 +93,49 @@ describe('servidor de planificación', () => {
 
   it('usa Gemini y, si falla, Groq', async () => {
     const used: string[] = [];
-    const res = await call(ask, (u) => {
+    const res = await call(ask, (u, i) => {
       if (u.includes('/users/doc')) return profile('docente');
       if (u.endsWith(':commit')) return Response.json({});
       if (u.includes('generativelanguage')) { used.push('gemini'); return new Response('', { status: 503 }); }
-      used.push('groq');
+      if (u.endsWith('/models')) return Response.json({ data: [{ id: 'whisper-large-v3' }, { id: 'qwen/qwen3-32b' }, { id: 'openai/gpt-oss-120b' }] });
+      used.push(JSON.parse(String(i?.body)).model);
       return Response.json({ choices: [{ message: { content: JSON.stringify(unidadIA) } }] });
     });
     expect(res.status).toBe(200);
-    expect(used).toEqual(['gemini', 'groq']);
+    expect(used).toEqual(['gemini', 'openai/gpt-oss-120b']);
     expect((await res.json()).proveedor).toBe('Groq');
+  });
+
+  it('Gemini escribe sin pensar de más, y si el modelo no lo acepta pide otra vez', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const res = await call(ask, (u, i) => {
+      if (u.includes('/users/doc')) return profile('docente');
+      if (u.endsWith(':commit')) return Response.json({});
+      const body = JSON.parse(String(i?.body)) as { generationConfig: Record<string, unknown> };
+      bodies.push(body.generationConfig);
+      if (body.generationConfig.thinkingConfig) return Response.json({ error: { message: 'Thinking budget is not supported for this model.' } }, { status: 400 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: 'pensando…', thought: true }, { text: JSON.stringify(unidadIA) }] } }] });
+    });
+    expect(res.status).toBe(200);
+    expect(bodies[0].thinkingConfig).toEqual({ thinkingBudget: 0 });
+    expect(bodies[1].thinkingConfig).toBeUndefined();
+  });
+
+  it('en Groq gratis, si el pedido es muy grande pide una respuesta más corta', async () => {
+    const max: number[] = [];
+    const res = await call(ask, (u, i) => {
+      if (u.includes('/users/doc')) return profile('docente');
+      if (u.endsWith(':commit')) return Response.json({});
+      if (u.includes('generativelanguage')) return new Response('', { status: 500 });
+      if (u.endsWith('/models')) return Response.json({ data: [{ id: 'openai/gpt-oss-120b' }] });
+      const body = JSON.parse(String(i?.body)) as { max_tokens: number; reasoning_effort?: string };
+      max.push(body.max_tokens);
+      expect(body.reasoning_effort).toBe('low');
+      if (max.length === 1) return Response.json({ error: { message: 'Request too large for model on tokens per minute (TPM): Limit 8000, Requested 9800, please reduce.' } }, { status: 413 });
+      return Response.json({ choices: [{ message: { content: JSON.stringify(unidadIA) } }] });
+    });
+    expect(res.status).toBe(200);
+    expect(max).toEqual([7000, 5000]);
   });
 
   it('si las dos fallan, dice por qué', async () => {
@@ -110,6 +143,7 @@ describe('servidor de planificación', () => {
       if (u.includes('/users/doc')) return profile('docente');
       if (u.endsWith(':commit')) return Response.json({});
       if (u.includes('generativelanguage')) return Response.json({ error: { message: 'API key not valid.' } }, { status: 400 });
+      if (u.endsWith('/models')) return Response.json({ data: [{ id: 'llama-3.3-70b-versatile' }] });
       return Response.json({ error: { message: 'Rate limit reached' } }, { status: 429 });
     });
     expect(res.status).toBe(502);
