@@ -47,4 +47,12 @@ describe('horario', () => {
     expect(blockRange(b('1', 1, '09:30', '11:20'), slots)).toEqual({ from: 3, count: 2 });
     expect(blockRange(b('1', 1, '15:00', '15:45'), slots)).toBeNull();
   });
+
+  it('la dirección puede escribir sus propios bloques', () => {
+    const slots = bellSlots({ start: '08:00', minutes: 45, count: 9, breaks: [], list: [
+      { start: '08:00', end: '08:40' }, { start: '09:20', end: '10:00' }, { start: '08:40', end: '09:20' }, { start: '10:00', end: '10:20', recreo: true }, { start: 'x', end: '' },
+    ] });
+    expect(slots.map((x) => `${x.recreo ? 'R' : x.n} ${x.start}`)).toEqual(['1 08:00', '2 08:40', '3 09:20', 'R 10:00']);
+    expect(bellSlots().filter((x) => !x.recreo)).toHaveLength(9);
+  });
 });

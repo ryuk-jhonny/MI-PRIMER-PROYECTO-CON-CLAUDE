@@ -29,6 +29,13 @@ async function joinWith(page: Page, code: string, name: string) {
   await page.locator('#jn').fill(name);
 }
 
+/** Abre la carpeta del aula si la pantalla muestra las carpetas (si está en clase, ya entra directo). */
+async function openAula(page: Page, aula: string) {
+  const folder = page.getByRole('button', { name: `Abrir ${aula}` });
+  await expect(folder.or(page.getByRole('heading', { name: 'Tomar asistencia' }))).toBeVisible();
+  if (await folder.isVisible()) await folder.click();
+}
+
 async function noHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
@@ -170,6 +177,7 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   // La grilla va por bloques: la clase ocupa el 1.º y el 2.º, y aparece el recreo.
   await expect(page.getByRole('rowheader', { name: /^1\.º/ })).toBeVisible();
   await expect(page.getByRole('rowheader', { name: /^Recreo/ })).toBeVisible();
+  await expect(page.getByRole('rowheader', { name: /^9\.º/ })).toBeVisible();
   await expect(page.getByRole('cell', { name: /Matemática/ })).toHaveAttribute('rowspan', '2');
 
   await nav.getByRole('button', { name: 'Inicio' }).click();
@@ -177,8 +185,8 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
 
   // Toma la asistencia de su clase y la exporta, solo de su área.
   await nav.getByRole('button', { name: 'Asistencia de clase' }).click();
+  await openAula(page, '1ro Primaria · A');
   await page.getByLabel('Área').selectOption({ label: 'Matemática' });
-  await page.getByLabel('Aula').selectOption({ label: '1ro Primaria · A' });
   await page.getByRole('button', { name: 'Todos presentes' }).click();
   await page.getByRole('button', { name: `${STUDENT}: Tarde` }).click();
   await page.getByRole('button', { name: 'Guardar asistencia' }).click();
@@ -223,6 +231,14 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   await expect(rub.getByText('Logro destacado (4)')).toBeVisible();
   await rub.getByRole('button', { name: 'Cerrar' }).click();
 
+  // Califica con la rúbrica y lo pasa a la nota de cada competencia del bimestre.
+  await card.getByRole('button', { name: 'Calificar' }).click();
+  const grade = page.getByRole('dialog', { name: 'Calificar con la rúbrica' });
+  await grade.getByLabel(`${STUDENT}, criterio 1`).selectOption('4');
+  await grade.getByRole('button', { name: /^Pasar a notas de/ }).click();
+  await expect(page.getByText(/^Notas de .* actualizadas con esta rúbrica/)).toBeVisible();
+  await grade.getByRole('button', { name: 'Cerrar' }).last().click();
+
   await card.getByRole('button', { name: 'Ver' }).click();
   const docView = page.getByRole('dialog', { name: 'Sesión 1 de Fracciones en el mercado' });
   await expect(docView.getByText('SESIÓN DE APRENDIZAJE 01 UNIDAD 1')).toBeVisible();
@@ -230,6 +246,13 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
   const download = page.waitForEvent('download');
   await docView.getByRole('button', { name: 'Word' }).click();
   expect((await download).suggestedFilename()).toMatch(/^sesion_1_unidad_1_.*\.docx$/);
+  await docView.getByRole('button', { name: 'Cerrar' }).click();
+
+  // Su resumen de asistencia y notas, con filtros.
+  await nav.getByRole('button', { name: 'Resumen' }).click();
+  await expect(page.getByRole('heading', { name: 'Resumen de asistencia y notas' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Asistencia de clase' })).toContainText('1 clase');
+  await expect(page.getByRole('region', { name: 'Notas por competencia' })).toContainText('Matemática');
   await page.context().close();
 });
 
@@ -281,6 +304,13 @@ test('el estudiante activa su carnet y vuelve a entrar con el QR y su PIN', asyn
   await expect(week.getByRole('cell', { name: /Matemática/ })).toBeVisible();
   await noHorizontalScroll(page);
   await week.getByRole('button', { name: 'Cerrar' }).last().click();
+
+  // Ve su asistencia de clase, la que tomó su docente.
+  await page.getByRole('navigation', { name: 'Accesos rápidos' }).getByRole('button', { name: 'Asistencia' }).click();
+  await page.getByRole('button', { name: 'Clases' }).click();
+  await expect(page.getByText('Tarde', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Matemática', { exact: true }).locator('visible=true').first()).toBeVisible();
+  await noHorizontalScroll(page);
 
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
   await openCarnet(page);
@@ -347,8 +377,8 @@ test('el panel de la dirección funciona en celular', async ({ browser }) => {
   await page.getByRole('button', { name: 'Abrir menú' }).click();
   await page.getByRole('dialog', { name: 'Menú' }).getByRole('button', { name: 'Asistencia de clase' }).click();
   await expect(page.getByRole('heading', { name: 'Asistencia de clase' })).toBeVisible();
+  await openAula(page, '1ro Primaria · A');
   await page.getByRole('combobox', { name: 'Área' }).selectOption({ label: 'Matemática' });
-  await page.getByRole('combobox', { name: 'Aula' }).selectOption({ label: '1ro Primaria · A' });
   await expect(page.getByText('1 clase registrada')).toBeVisible();
 
   // Al recargar sigue dentro; en una pestaña nueva tiene que volver a ingresar.

@@ -8,6 +8,7 @@ import { aulaOf, downloadCsv, levelOf } from '../lib/school';
 import { LEVEL_LABEL } from '../lib/cneb';
 import { gradeOptions, parseRoster } from '../lib/roster';
 import StudentQrCanvas from '../components/StudentQrCanvas';
+import { AulaFolders, FolderBack } from './Folders';
 
 const blank = (): Student => ({
   id: '', qrCodeValue: '', fullName: '', enrollmentCode: '', gradeLevel: '', section: '', avatarUrl: '', institutionName: '', academicYear: '',
@@ -28,6 +29,9 @@ export default function StudentsTab({ ctx }: { ctx: PanelCtx }) {
     .filter((s) => (aula ? aulaOf(s) === aula : true))
     .filter((s) => `${s.fullName} ${s.dni || ''} ${aulaOf(s)}`.toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => aulaOf(a).localeCompare(aulaOf(b)) || a.fullName.localeCompare(b.fullName));
+
+  // Con varias aulas se entra por carpetas; al buscar, se busca en todo el colegio.
+  const showFolders = aulas.length > 1 && !aula && !q.trim();
 
   const exportList = () => downloadCsv('estudiantes.csv', [
     ['Estudiante', 'DNI', 'Nivel', 'Grado', 'Sección', 'Apoderado', 'Celular', 'Código estudiante', 'Código familia', 'Asistencia %'],
@@ -53,17 +57,16 @@ export default function StudentsTab({ ctx }: { ctx: PanelCtx }) {
           {isDirector ? 'Cada estudiante recibe su carnet con QR y dos códigos: uno para su cuenta y otro para su familia.' : 'La dirección todavía no registró la nómina.'}
         </Empty>
       ) : (
+        <>
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre, DNI o aula" className={`${input} pl-9`} aria-label="Buscar estudiante" />
+        </div>
+        {aula && <FolderBack name={aula} onBack={() => setAula('')} />}
+        {showFolders ? (
+          <AulaFolders items={aulas.map((a) => ({ name: a, count: students.filter((s) => aulaOf(s) === a).length }))} onOpen={setAula} />
+        ) : (
         <Card className="overflow-hidden">
-          <div className="p-4 border-b border-slate-800 grid sm:grid-cols-[1fr_220px] gap-2">
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre, DNI o aula" className={`${input} pl-9`} aria-label="Buscar estudiante" />
-            </div>
-            <select value={aula} onChange={(e) => setAula(e.target.value)} className={input} aria-label="Filtrar por aula">
-              <option value="">Todas las aulas</option>
-              {aulas.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
           {isDirector && (
             <div className="px-4 py-3 border-b border-slate-800 flex flex-wrap gap-2">
               <button type="button" onClick={() => setPrinting({ kind: 'carnet', list })} className={btn.ghost}><IdCard className="w-4 h-4" /> Carnets ({list.length})</button>
@@ -93,8 +96,10 @@ export default function StudentsTab({ ctx }: { ctx: PanelCtx }) {
             ))}
           </ul>
           {list.length === 0 && <p className="p-8 text-center text-sm text-slate-400">No hay estudiantes con ese filtro.</p>}
-          {list.length > 500 && <p className="p-3 text-center text-xs text-slate-500">Mostrando 500 de {list.length}. Usa el buscador o el filtro de aula.</p>}
+          {list.length > 500 && <p className="p-3 text-center text-xs text-slate-500">Mostrando 500 de {list.length}. Usa el buscador o abre un aula.</p>}
         </Card>
+        )}
+        </>
       )}
 
       {editing && (
@@ -107,6 +112,7 @@ export default function StudentsTab({ ctx }: { ctx: PanelCtx }) {
             setEditing(null);
             if (s.id) await ctx.saveStudents([s], `Datos de ${s.fullName} actualizados.`);
             else await ctx.addStudents([s], `${s.fullName} matriculado(a). Su carnet y sus códigos ya están listos.`);
+            if (aulas.length > 0) setAula(aulaOf(s));
           }}
         />
       )}

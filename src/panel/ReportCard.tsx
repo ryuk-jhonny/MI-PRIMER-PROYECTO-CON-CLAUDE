@@ -3,15 +3,19 @@ import QRCode from 'qrcode';
 import { Printer, X } from 'lucide-react';
 import { Student } from '../types/education';
 import { InstitutionConfig, DirectorProfile } from '../types/institution';
-import { CNEB_AREAS, compUnitsOf, findGrade, levelOf, overallLiteral, periodCount, periodLabel, statusOf, unitsOf } from '../lib/school';
+import { averageLiteral, CNEB_AREAS, compUnitsOf, findGrade, levelOf, overallLiteral, periodCount, periodLabel, unitsOf } from '../lib/school';
 import { competenciasOf } from '../lib/cneb';
 
 /** Libreta de notas imprimible (o guardable como PDF desde el navegador). */
-export default function ReportCard({ student, config, profile, onClose }: { student: Student; config: InstitutionConfig; profile: DirectorProfile; onClose: () => void }) {
+export default function ReportCard({ student, config, profile, onClose, onlyAreas }: {
+  student: Student; config: InstitutionConfig; profile: DirectorProfile; onClose: () => void;
+  /** Docentes: solo sus áreas. */
+  onlyAreas?: string[];
+}) {
   const [qr, setQr] = useState('');
   const n = periodCount(config);
   const level = levelOf(student);
-  const areas = [...new Set([...CNEB_AREAS[level], ...(student.grades || []).map((g) => g.courseName)])];
+  const areas = [...new Set([...CNEB_AREAS[level], ...(student.grades || []).map((g) => g.courseName)])].filter((a) => !onlyAreas || onlyAreas.includes(a));
   const modular = level === 'primaria' ? config.modularCodePrimaria : config.modularCodeSecundaria;
   const overall = overallLiteral(student);
 
@@ -73,9 +77,9 @@ export default function ReportCard({ student, config, profile, onClose }: { stud
                     {unitsOf(g, n).map((v, i) => <td key={i} className="p-2 border border-slate-300 text-center font-bold">{v || '—'}</td>)}
                     <td className="p-2 border border-slate-300 text-center font-bold bg-slate-100">{g?.average || '—'}</td>
                   </tr>,
-                  ...comps.filter((c) => compUnitsOf(g, c.id, n).some(Boolean)).map((c) => (
+                  ...comps.map((c) => (
                     <tr key={`${a}-${c.id}`}>
-                      <td className="py-1.5 px-2 pl-5 border border-slate-300 text-[11px] text-slate-600">{c.name}</td>
+                      <td className="py-1.5 px-2 pl-5 border border-slate-300 text-[11px] text-slate-600">C{c.n}. {c.name}</td>
                       {compUnitsOf(g, c.id, n).map((v, i) => <td key={i} className="py-1.5 px-2 border border-slate-300 text-center text-[11px]">{v || '—'}</td>)}
                       <td className="py-1.5 px-2 border border-slate-300" />
                     </tr>
@@ -93,8 +97,8 @@ export default function ReportCard({ student, config, profile, onClose }: { stud
               </p>
             </div>
             <div className="p-3 rounded-lg border border-slate-300">
-              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Nivel de logro general</p>
-              <p className="mt-1"><strong>{overall || '—'}</strong> {overall && `· ${statusOf(overall)}`}</p>
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">{onlyAreas ? `Logro en ${areas.join(', ')}` : 'Nivel de logro general'}</p>
+              <p className="mt-1"><strong>{(onlyAreas ? averageLiteral(areas.map((a) => findGrade(student, a)?.average || '')) : overall) || '—'}</strong></p>
             </div>
           </section>
 

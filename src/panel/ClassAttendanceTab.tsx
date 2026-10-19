@@ -7,6 +7,7 @@ import { nextClass, nowIn } from '../lib/schedule';
 import { CLASS_MARK_LABEL, ClassAttendance, ClassMark } from '../lib/store';
 import { aulaOptions } from './ScheduleTab';
 import { btn, Card, Empty, input, label, PageHeader } from './ui';
+import { AulaFolders, FolderBack } from './Folders';
 
 const MARKS: ClassMark[] = ['P', 'T', 'F', 'J'];
 const MARK_STYLE: Record<ClassMark, string> = {
@@ -31,7 +32,7 @@ export default function ClassAttendanceTab({ ctx }: { ctx: PanelCtx }) {
   const aulas = aulaOptions(ctx);
   const [records, setRecords] = useState<ClassAttendance[] | null>(null);
   const [area, setArea] = useState(ctx.myAreas[0] || '');
-  const [aula, setAula] = useState(aulas[0] || '');
+  const [aula, setAula] = useState(aulas.length === 1 ? aulas[0] : '');
   const [day, setDay] = useState(today);
   const [owner, setOwner] = useState(isDirector ? '' : me.uid);
   const [marks, setMarks] = useState<Record<string, ClassMark>>({});
@@ -65,7 +66,7 @@ export default function ClassAttendanceTab({ ctx }: { ctx: PanelCtx }) {
     setSaving(true);
     try {
       const keep = Object.fromEntries(roster.filter((s) => marks[s.id]).map((s) => [s.id, marks[s.id]]));
-      const rec = await store.saveClassAttendance({ area, aula, day, marks: keep });
+      const rec = await store.saveClassAttendance({ area, aula, day, marks: keep }, saved?.marks);
       setRecords((l) => [...(l || []).filter((r) => r.id !== rec.id), rec].sort((a, b) => a.day.localeCompare(b.day)));
       ctx.toast('Asistencia de clase guardada.');
     } catch (err) { ctx.toast(friendlyError(err), 'error'); }
@@ -104,17 +105,18 @@ export default function ClassAttendanceTab({ ctx }: { ctx: PanelCtx }) {
         subtitle={isDirector ? 'La asistencia que toma cada docente en su área. La de la puerta está en «Asistencia QR».' : 'Tu asistencia por área y aula. Solo la ven tú y la dirección.'}
       />
 
-      <Card className="p-5 grid sm:grid-cols-3 gap-3">
+      {!aula ? (
+        <AulaFolders unit="estudiantes" onOpen={setAula} items={aulas.map((a) => {
+          const taken = new Set(mine.filter((r) => r.aula === a).map((r) => r.day)).size;
+          return { name: a, count: students.filter((s) => aulaOf(s) === a).length, hint: taken ? `${taken} ${taken === 1 ? 'clase' : 'clases'}` : undefined };
+        })} />
+      ) : (<>
+      {aulas.length > 1 && <FolderBack name={aula} onBack={() => setAula('')} />}
+      <Card className="p-5 grid sm:grid-cols-2 gap-3">
         <div>
           <label className={label} htmlFor="ca-area">Área</label>
           <select id="ca-area" value={area} onChange={(e) => setArea(e.target.value)} className={input}>
             {ctx.myAreas.map((a) => <option key={a}>{a}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className={label} htmlFor="ca-aula">Aula</label>
-          <select id="ca-aula" value={aula} onChange={(e) => setAula(e.target.value)} className={input}>
-            {aulas.map((a) => <option key={a}>{a}</option>)}
           </select>
         </div>
         <div>
@@ -205,6 +207,7 @@ export default function ClassAttendanceTab({ ctx }: { ctx: PanelCtx }) {
           )}
         </Card>
       )}
+      </>)}
     </div>
   );
 }

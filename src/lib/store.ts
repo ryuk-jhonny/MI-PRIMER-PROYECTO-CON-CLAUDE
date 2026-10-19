@@ -1,5 +1,5 @@
 import {
-  collection, deleteDoc, doc, Firestore, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, runTransaction,
+  collection, deleteDoc, deleteField, doc, Firestore, getDoc, getDocs, increment, limit, onSnapshot, orderBy, query, runTransaction,
   setDoc, updateDoc, where, writeBatch, WriteBatch,
 } from 'firebase/firestore';
 import { Student } from '../types/education';
@@ -172,6 +172,23 @@ export interface ClassAttendance {
 const slug = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 export const classAttendanceId = (uid: string, day: string, area: string, aula: string) => `${uid}_${day}_${slug(area)}_${slug(aula)}`;
+
+/** Lo que ve cada estudiante de su asistencia de clase: por docente, `{día}_{área}` → marca. */
+export interface ClassMarks { byTeacher?: Record<string, Record<string, { d: string; a: string; m: ClassMark }>> }
+
+/** Calificación con la rúbrica de una sesión en un aula: puntaje 1 a 4 por criterio. */
+export interface RubricScores {
+  id: string;
+  ownerUid: string;
+  planId: string;
+  aula: string;
+  /** Índice del criterio → id de la competencia que evalúa. */
+  links: Record<string, string>;
+  scores: Record<string, Record<string, number>>;
+  updatedAt: string;
+}
+
+export const rubricScoresId = (planId: string, aula: string) => `${planId}_${slug(aula)}`;
 
 export interface Codes { docente: string; auxiliar: string }
 
@@ -420,6 +437,11 @@ export function createStaffStore(me: UserProfile) {
       );
     },
 
+    async listAttendanceRange(from: string, to: string): Promise<AttendanceRecord[]> {
+      const snap = await getDocs(query(col('attendance'), where('day', '>=', from), where('day', '<=', to)));
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AttendanceRecord, 'id'>) }));
+    },
+
     async registerScan(token: string, known?: Student[]): Promise<ScanResult> {
       let st = known?.find((s) => tokenFromQr(s.qrCodeValue) === token);
       if (!st) {
@@ -478,10 +500,32 @@ export function createStaffStore(me: UserProfile) {
       return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ClassAttendance, 'id'>) })).sort((a, b) => a.day.localeCompare(b.day));
     },
 
-    async saveClassAttendance(r: Pick<ClassAttendance, 'area' | 'aula' | 'day' | 'marks'>): Promise<ClassAttendance> {
+    async saveClassAttendance(r: Pick<ClassAttendance, 'area' | 'aula' | 'day' | 'marks'>, before: Record<string, ClassMark> = {}): Promise<ClassAttendance> {
       const id = classAttendanceId(me.uid, r.day, r.area, r.aula);
       const next = { ownerUid: me.uid, ownerName: me.fullName, area: r.area, aula: r.aula, day: r.day, marks: r.marks, updatedAt: nowIso() };
-      await setDoc(sub('classAttendance', id), clean(next));
+      const key = `${r.day}_${slug(r.area)}`;
+      // Cada estudiante (y su familia) ve su propia marca en classMarks/{estudiante}.
+      await commitInChunks(db, [
+        (b: WriteBatch) => b.set(sub('classAttendance', id), clean(next)),
+        ...[...new Set([...Object.keys(before), ...Object.keys(r.marks)])].map((sid) => (b: WriteBatch) => b.set(sub('classMarks', sid), {
+          byTeacher: { [me.uid]: { [key]: r.marks[sid] ? { d: r.day, a: r.area, m: r.marks[sid] } : deleteField() } },
+        }, { merge: true })),
+      ], 200);
+      return { id, ...next };
+    },
+
+    // ----- Calificación con rúbrica -----
+
+    async listRubricScores(): Promise<RubricScores[]> {
+      const q = role === 'director' ? query(col('rubricScores')) : query(col('rubricScores'), where('ownerUid', '==', me.uid));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<RubricScores, 'id'>) }));
+    },
+
+    async saveRubricScores(r: Pick<RubricScores, 'planId' | 'aula' | 'links' | 'scores'>): Promise<RubricScores> {
+      const id = rubricScoresId(r.planId, r.aula);
+      const next = { ownerUid: me.uid, planId: r.planId, aula: r.aula, links: r.links, scores: r.scores, updatedAt: nowIso() };
+      await setDoc(sub('rubricScores', id), clean(next));
       return { id, ...next };
     },
 
@@ -683,6 +727,12 @@ export function createFamilyStore(me: UserProfile) {
     async listAttendance(studentId: string): Promise<AttendanceRecord[]> {
       const snap = await getDocs(query(collection(db, 'institutions', iid, 'attendance'), where('studentId', '==', studentId)));
       return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AttendanceRecord, 'id'>) })).sort((a, b) => b.day.localeCompare(a.day));
+    },
+
+    async listClassMarks(studentId: string): Promise<{ day: string; area: string; mark: ClassMark }[]> {
+      const snap = await getDoc(doc(db, 'institutions', iid, 'classMarks', studentId));
+      const by = snap.exists() ? (snap.data() as ClassMarks).byTeacher || {} : {};
+      return Object.values(by).flatMap((m) => Object.values(m)).map((x) => ({ day: x.d, area: x.a, mark: x.m })).sort((a, b) => b.day.localeCompare(a.day));
     },
 
     async listAnnouncements(): Promise<Announcement[]> {

@@ -78,10 +78,10 @@ export default function GradesTab({ ctx }: { ctx: PanelCtx }) {
     <div className="space-y-6 stagger">
       <PageHeader
         title="Notas por competencia"
-        subtitle={`Escala CNEB (AD, A, B, C) · ${config.periodType === 'trimestral' ? '3 trimestres' : '4 bimestres'} · Periodo actual: ${config.activePeriod}`}
+        subtitle={`Una nota por competencia, como en el SIAGIE (Matemática 4, Educación Física 3…) · AD, A, B, C · ${config.periodType === 'trimestral' ? '3 trimestres' : '4 bimestres'} · Periodo actual: ${config.activePeriod}`}
         actions={
           <>
-            <button type="button" onClick={exportAula} disabled={!area} className={btn.secondary}><Download className="w-4 h-4" /> Exportar</button>
+            <button type="button" onClick={exportAula} disabled={!area} className={btn.secondary}><Download className="w-4 h-4" /> Exportar para SIAGIE</button>
             <button type="button" onClick={save} disabled={!dirty} className={btn.primary}><Save className="w-4 h-4" /> Guardar{dirty ? ` (${dirty})` : ''}</button>
           </>
         }
@@ -185,7 +185,7 @@ export default function GradesTab({ ctx }: { ctx: PanelCtx }) {
         </>
       )}
 
-      {report && <ReportCard student={report} config={config} profile={ctx.profile} onClose={() => setReport(null)} />}
+      {report && <ReportCard student={report} config={config} profile={ctx.profile} onlyAreas={ctx.isDirector ? undefined : myAreas} onClose={() => setReport(null)} />}
     </div>
   );
 }

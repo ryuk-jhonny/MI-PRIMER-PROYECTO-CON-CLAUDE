@@ -202,6 +202,27 @@ service cloud.firestore {
         allow delete: if teacher(iid) && resource.data.ownerUid == request.auth.uid;
       }
 
+      // Copia por estudiante de su asistencia de clase, para que él y su familia la vean.
+      // Cada docente solo cambia su parte (byTeacher.{uid}).
+      match /classMarks/{sid} {
+        allow read: if staff(iid) || linked(iid, sid);
+        allow create: if teacher(iid) && request.resource.data.keys().hasOnly(['byTeacher'])
+          && request.resource.data.byTeacher.keys().hasOnly([request.auth.uid]);
+        allow update: if teacher(iid) && request.resource.data.keys().hasOnly(['byTeacher'])
+          && request.resource.data.byTeacher.diff(resource.data.byTeacher).affectedKeys().hasOnly([request.auth.uid]);
+      }
+
+      // Calificación con la rúbrica de una sesión: la ve y la cambia su docente; la dirección la ve.
+      match /rubricScores/{rid} {
+        allow read: if director(iid) || (teacher(iid) && resource.data.ownerUid == request.auth.uid);
+        allow create, update: if teacher(iid)
+          && request.resource.data.ownerUid == request.auth.uid
+          && (resource == null || resource.data.ownerUid == request.auth.uid)
+          && request.resource.data.keys().hasOnly(['ownerUid', 'planId', 'aula', 'links', 'scores', 'updatedAt'])
+          && request.resource.data.scores is map && request.resource.data.scores.size() <= 200;
+        allow delete: if teacher(iid) && resource.data.ownerUid == request.auth.uid;
+      }
+
       match /announcements/{aid} {
         allow read: if member(iid);
         allow create: if teacher(iid) && request.resource.data.authorUid == request.auth.uid;

@@ -331,18 +331,27 @@ export function DetalleEditor({ value, onChange }: { value: PlanDoc; onChange: (
         {momento('desarrollo', 'Desarrollo', 10)}
         {momento('cierre', 'Cierre', 5)}
       </div>
-      <RubricaEditor items={d.rubrica} onChange={(v) => set({ rubrica: v })} />
+      <RubricaEditor items={d.rubrica} onChange={(v) => set({ rubrica: v })} competencias={d.proposito.map((x) => x.competencia).filter(Boolean)} />
     </div>
   );
 }
 
 /** Rúbrica de una sesión: un criterio por fila y sus cuatro niveles de logro. */
-export function RubricaEditor({ items, onChange }: { items: RubricaFila[]; onChange: (v: RubricaFila[]) => void }) {
+export function RubricaEditor({ items, onChange, competencias = [] }: { items: RubricaFila[]; onChange: (v: RubricaFila[]) => void; competencias?: string[] }) {
   return (
     <Rows title="Rúbrica de evaluación" items={items} onChange={onChange} blank={{ criterio: '', destacado: '', esperado: '', proceso: '', inicio: '' }}>
       {(r, s, i) => (
         <div className="grid sm:grid-cols-2 gap-2">
           <div className="sm:col-span-2"><Txt id={`ds-rc${i}`} title="Criterio" value={r.criterio} onChange={(v) => s({ criterio: v })} /></div>
+          {competencias.length > 0 && (
+            <div className="sm:col-span-2">
+              <label className={label} htmlFor={`ds-rcomp${i}`}>Competencia que evalúa</label>
+              <select id={`ds-rcomp${i}`} value={r.competencia || ''} onChange={(e) => s({ competencia: e.target.value || undefined })} className={input}>
+                <option value="">Elige la competencia</option>
+                {competencias.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
           <Txt id={`ds-r4${i}`} title="Logro destacado (4)" value={r.destacado} onChange={(v) => s({ destacado: v })} />
           <Txt id={`ds-r3${i}`} title="Logro esperado (3)" value={r.esperado} onChange={(v) => s({ esperado: v })} />
           <Txt id={`ds-r2${i}`} title="En proceso (2)" value={r.proceso} onChange={(v) => s({ proceso: v })} />
