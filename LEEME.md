@@ -36,10 +36,14 @@ src/
   portal/      App de estudiantes y familias, y portal del carnet
   lib/
     cneb.ts      Áreas, competencias y capacidades del CNEB por nivel
+    planDoc.ts   Estructura de la unidad y la sesión (la que arma la IA)
+    planWord.ts  Descarga en Word con el formato del docente
     school.ts    Promedios, periodos, aulas e IMC
     store.ts     Lectura y escritura en Firestore por rol
     accounts.ts  Cuentas, alta del colegio y códigos
     firebase.ts  Conexión con Firebase
+server/planificar.ts  IA de planificación: comprueba la sesión, cuenta el uso diario y llama a Gemini o Groq
+api/planificar.ts     La misma función publicada en Vercel
 firestore.rules     Reglas de seguridad (quién ve y cambia cada dato)
 tests/
   unit/        Reglas escolares (vitest)
@@ -69,15 +73,15 @@ npm run dev:local      # terminal 2: la app conectada a los emuladores
 | Comando | Qué revisa |
 |---|---|
 | `npm run lint` | Tipos de TypeScript |
-| `npm test` | Promedios CNEB, periodos, códigos, horarios e importación de nóminas |
-| `npm run test:reglas` | 55 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, el carnet no entra con un PIN equivocado ni se activa dos veces, un auxiliar no pone notas, nadie lista los códigos, el portal no se puede modificar sin sesión, etc. |
-| `npm run test:e2e` | Recorre la app en Chromium: la dirección registra su colegio y matricula; una docente de Matemática se une, califica y arma su horario; la familia y el estudiante activan su carnet, entran con su PIN y ven las notas y el horario de su sección; el portal del carnet se abre sin cuenta; todo revisado también en pantalla de celular |
+| `npm test` | Promedios CNEB, periodos, códigos, horarios, importación de nóminas, la IA de planificación (con respuestas simuladas) y el Word |
+| `npm run test:reglas` | 57 casos de seguridad: otro colegio no lee nada, una familia solo ve a sus hijos, el carnet no entra con un PIN equivocado ni se activa dos veces, un auxiliar no pone notas, nadie lista los códigos, nadie se salta el límite diario de la IA, el portal no se puede modificar sin sesión, etc. |
+| `npm run test:e2e` | Recorre la app en Chromium: la dirección registra su colegio y matricula; una docente de Matemática se une, califica, arma su horario y genera con IA una unidad y una de sus sesiones, y la descarga en Word; la familia y el estudiante activan su carnet, entran con su PIN y ven las notas y el horario de su sección; el portal del carnet se abre sin cuenta; todo revisado también en pantalla de celular |
 | `npm run test:todo` | Todo lo anterior |
 
 ## 3. Publicar
 
 1. Configura Firebase siguiendo [FIREBASE.md](FIREBASE.md) y publica las reglas.
-2. Importa el repositorio en <https://vercel.com>, agrega las seis variables `VITE_FIREBASE_...` y despliega.
+2. Importa el repositorio en <https://vercel.com>, agrega las seis variables `VITE_FIREBASE_...` y despliega. Para la planificación con IA agrega también `GEMINI_API_KEY` y `GROQ_API_KEY` (ver FIREBASE.md).
 3. Agrega tu dominio de Vercel en **Authentication → Dominios autorizados**.
 
 ## 4. Decisiones que tomé (por validar)
@@ -88,6 +92,7 @@ npm run dev:local      # terminal 2: la app conectada a los emuladores
 - **Docentes y sus aulas.** Un docente ve solo sus áreas. Si además elige sus aulas en *Mi área CNEB*, solo ve esas aulas en Notas.
 - **Carnets seguros.** El QR lleva un código largo y aleatorio, no el DNI. Si un carnet se pierde, en *Editar estudiante → Generar QR nuevo* el anterior deja de funcionar.
 - **Puntual o tardanza** se decide con la hora de Lima y la hora límite de Configuración (07:45 por defecto). Las inasistencias se registran al pulsar **Cerrar día**, para no poner faltas en feriados.
+- **Planificación con IA.** Gemini es la principal y Groq el respaldo. La IA arma la unidad o la sesión con la estructura del docente (situación significativa, propósito, transversales, enfoques, secuencia, evaluación, rúbrica). El docente la revisa y la edita antes de guardar. Hasta 25 generaciones por docente al día.
 - **Avisos por WhatsApp:** el botón abre WhatsApp con el mensaje ya escrito y la persona lo envía.
 - **Diseño:** se mantienen el diseño, los colores y las transiciones de la página original. Se añadió la sección *Comunidad educativa* con los cuatro roles y las áreas del CNEB por nivel.
 
@@ -116,4 +121,5 @@ Los marcadores `[ASÍ]` resaltados en amarillo son datos que solo tú puedes pon
 - React 19, Vite 8, Tailwind 4 y TypeScript. Iconos lucide-react.
 - Firebase 12 (Authentication y Firestore). La asistencia del día se actualiza en vivo.
 - `jsqr` lee el QR cuando el navegador no tiene lector propio (iPhone).
-- `vercel.json` redirige todas las rutas a la app, añade cabeceras de seguridad y evita que los buscadores indexen los portales de los carnets.
+- `docx` arma el Word en el navegador; se descarga solo cuando el docente pulsa **Word**.
+- `vercel.json` redirige todas las rutas a la app (menos `/api`), añade cabeceras de seguridad y evita que los buscadores indexen los portales de los carnets.

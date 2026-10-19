@@ -167,6 +167,36 @@ test('una docente de Matemática se une y califica por competencias', async ({ b
 
   await nav.getByRole('button', { name: 'Inicio' }).click();
   await expect(page.getByText(/^(Ahora en clase|Tu próxima clase)/)).toBeVisible();
+
+  // Planifica con IA (en las pruebas responde un documento de ejemplo): unidad, una de sus sesiones y el Word.
+  await nav.getByRole('button', { name: 'Planificación' }).click();
+  await page.getByRole('button', { name: 'Generar con IA' }).click();
+  const ai = page.getByRole('dialog', { name: 'Planificar con IA' });
+  await expect(ai.getByText(/No escribas nombres ni datos de tus estudiantes/)).toBeVisible();
+  await ai.getByLabel('Tema').fill('Fracciones en el mercado');
+  await ai.getByRole('button', { name: 'Generar con IA' }).click();
+  const unit = page.getByRole('dialog', { name: 'Unidad de aprendizaje' });
+  await expect(unit.getByLabel('Título', { exact: true })).toHaveValue('Aprendemos Fracciones en el mercado');
+  await expect(unit.getByLabel('Reto pedagógico')).toHaveValue(/Fracciones en el mercado/);
+  await unit.getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByText('Documento guardado.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Generar sesiones' }).click();
+  const seq = page.getByRole('dialog', { name: 'Sesiones de la unidad 1' });
+  await seq.getByRole('button', { name: 'Generar sesión 1' }).click();
+  const ses = page.getByRole('dialog', { name: 'Sesión de aprendizaje' });
+  await expect(ses.getByLabel('Título', { exact: true })).toHaveValue('Sesión 1 de Fracciones en el mercado');
+  await ses.getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByText('Documento guardado.').first()).toBeVisible();
+
+  const card = page.locator('section').filter({ hasText: 'Sesión 1 de Fracciones en el mercado' }).last();
+  await card.getByRole('button', { name: 'Ver' }).click();
+  const docView = page.getByRole('dialog', { name: 'Sesión 1 de Fracciones en el mercado' });
+  await expect(docView.getByText('SESIÓN DE APRENDIZAJE 01 UNIDAD 1')).toBeVisible();
+  await expect(docView.getByText('RÚBRICA DE EVALUACIÓN')).toBeVisible();
+  const download = page.waitForEvent('download');
+  await docView.getByRole('button', { name: 'Word' }).click();
+  expect((await download).suggestedFilename()).toMatch(/^sesion_1_unidad_1_.*\.docx$/);
   await page.context().close();
 });
 

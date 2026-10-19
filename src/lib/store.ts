@@ -6,6 +6,7 @@ import { Student } from '../types/education';
 import { DEFAULT_DIRECTOR_PROFILE, DEFAULT_INSTITUTION_CONFIG, DirectorProfile, InstitutionConfig } from '../types/institution';
 import type { Level } from './cneb';
 import { fb } from './firebase';
+import type { PlanDoc } from './planDoc';
 import { ClassBlock, OwnedBlock, TeacherSchedule } from './schedule';
 
 // =====================================================================
@@ -102,6 +103,10 @@ export interface Plan {
   status: PlanStatus;
   observacion: string;
   updatedAt: string;
+  /** Documento completo con el formato del docente (lo arma la IA y se descarga en Word). */
+  detalle?: PlanDoc;
+  /** La unidad de la que salió esta sesión. */
+  unidadId?: string;
 }
 
 export interface Task {
